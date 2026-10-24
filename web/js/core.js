@@ -125,21 +125,16 @@ export async function copyText(text) {
 export const theme = {
   get: () => localStorageGet("theme") || "dark",
   // Switching themes restyles every element. Per-element colour transitions made that look like
-  // lag (each part faded at its own pace), so they are paused for the switch, and where the
-  // engine supports it the whole page crossfades once instead.
+  // lag (each part faded at its own pace), so they are paused for the switch. No View Transition:
+  // in the app's WKWebView its callback did not run, so the theme never changed.
   set(v) {
     const root = document.documentElement;
     if (store.get().theme !== v) store.set({ theme: v }); // the icon flips now, even while the page crossfades
     if (root.dataset.theme === v) return;
-    const apply = () => {
-      root.classList.add("theme-switching");
-      root.dataset.theme = v;
-      localStorageSet("theme", v);
-      requestAnimationFrame(() => requestAnimationFrame(() => root.classList.remove("theme-switching")));
-    };
-    const calm = matchMedia("(prefers-reduced-motion: reduce)").matches;
-    if (document.startViewTransition && !calm && root.dataset.theme) document.startViewTransition(apply);
-    else apply();
+    root.classList.add("theme-switching");
+    root.dataset.theme = v;
+    localStorageSet("theme", v);
+    setTimeout(() => root.classList.remove("theme-switching"), 50);
   },
 };
 export function localStorageGet(k) { try { return localStorage.getItem("qhs." + k); } catch { return null; } }

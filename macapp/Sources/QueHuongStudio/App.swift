@@ -14,6 +14,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate {
     private var updating = false
 
     func applicationDidFinishLaunching(_ note: Notification) {
+        if renameOldBundle() { return }
         updater = SPUStandardUpdaterController(startingUpdater: true, updaterDelegate: self, userDriverDelegate: nil)
         NSApp.mainMenu = buildMenu()
 
@@ -38,6 +39,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate {
 
         server.onExit = { [weak self] code in self?.serverExited(code) }
         startStudio()
+    }
+
+    /// Sparkle updates an app in place, so copies installed before the rename keep the file name
+    /// "Quê Hương Studio.app". On first start such a copy renames itself to "Song Studio.app" and
+    /// reopens from there; the bundle identifier, data and keys do not change. False when nothing to do.
+    private func renameOldBundle() -> Bool {
+        let url = Bundle.main.bundleURL
+        let name = url.lastPathComponent.precomposedStringWithCanonicalMapping
+        guard name == "Quê Hương Studio.app".precomposedStringWithCanonicalMapping else { return false }
+        let target = url.deletingLastPathComponent().appendingPathComponent("Song Studio.app")
+        guard !FileManager.default.fileExists(atPath: target.path),
+              (try? FileManager.default.moveItem(at: url, to: target)) != nil else { return false } // e.g. no write access: keep going under the old name
+        let config = NSWorkspace.OpenConfiguration()
+        config.createsNewApplicationInstance = true
+        NSWorkspace.shared.openApplication(at: target, configuration: config) { _, _ in
+            DispatchQueue.main.async { NSApp.terminate(nil) }
+        }
+        return true
     }
 
     /// Replaces any studio already on the port (an older app or a terminal run), starts the bundled

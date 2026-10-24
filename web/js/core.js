@@ -36,6 +36,7 @@ const state = {
   consoleRun: null, // id of the run shown in the drawer
   toasts: [],
   runsVersion: 0, // bumps whenever a run starts or ends so views can refetch
+  theme: "", // the current theme, so the toggle re-renders the moment it changes
 };
 const listeners = new Set();
 export const store = {
@@ -128,6 +129,7 @@ export const theme = {
   // engine supports it the whole page crossfades once instead.
   set(v) {
     const root = document.documentElement;
+    if (store.get().theme !== v) store.set({ theme: v }); // the icon flips now, even while the page crossfades
     if (root.dataset.theme === v) return;
     const apply = () => {
       root.classList.add("theme-switching");

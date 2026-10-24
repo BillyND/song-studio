@@ -53,9 +53,9 @@ async function quit() {
 }
 
 function ThemeToggle() {
-  const cur = document.documentElement.dataset.theme;
+  const cur = useStore((s) => s.theme);
   return html`<${Btn} kind="ghost" size="sm" icon=${cur === "dark" ? "sun" : "moon"} title="Đổi giao diện sáng/tối"
-    onClick=${() => { theme.set(cur === "dark" ? "light" : "dark"); store.set({}); }} />`;
+    onClick=${() => theme.set(cur === "dark" ? "light" : "dark")} />`;
 }
 
 const pageBuild = document.querySelector('meta[name="studio-build"]')?.content;

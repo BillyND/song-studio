@@ -235,3 +235,51 @@ func TestDoctorAndDiagnostics(t *testing.T) {
 		t.Fatalf("failed runs should carry their events: %v", names)
 	}
 }
+
+func TestGenreLanguageAndTheme(t *testing.T) {
+	home := t.TempDir()
+	cs, _ := loadConfig(filepath.Join(home, "c.json"), home)
+	c := cs.Get()
+	c.ProjectsDir = filepath.Join(home, "songs")
+	cs.cfg = c
+	p := Projects{cfg: cs}
+	if _, err := p.Create("X", "", "a", nil, "jazz-fusion", ""); err == nil {
+		t.Fatal("unknown genre must be refused")
+	}
+	slug, err := p.Create("Đêm Phố", "", "a", nil, "pop", "en")
+	if err != nil {
+		t.Fatal(err)
+	}
+	read := func() map[string]any {
+		var m map[string]any
+		b, _ := os.ReadFile(filepath.Join(c.ProjectsDir, slug, "project.json"))
+		json.Unmarshal(b, &m)
+		return m
+	}
+	if m := read(); m["video_theme"] != "hien-dai" || m["karaoke_color"] != "blue" || m["language"] != "en" {
+		t.Fatalf("pop song defaults: %v", m)
+	}
+	str := func(s string) *string { return &s }
+	if err := p.SetMeta(slug, SongMeta{Genre: str("bolero")}); err != nil {
+		t.Fatal(err)
+	}
+	if m := read(); m["video_theme"] != "co-dien" || m["karaoke_color"] != "gold" || m["title"] != "Đêm Phố" {
+		t.Fatalf("genre change should move the theme and keep other keys: %v", m)
+	}
+	if err := p.SetMeta(slug, SongMeta{Theme: str("hien-dai")}); err != nil || read()["genre"] != "bolero" || read()["video_theme"] != "hien-dai" {
+		t.Fatalf("theme alone: %v %v", err, read())
+	}
+	for _, bad := range []SongMeta{{Language: str("xx")}, {Theme: str("neon")}, {Genre: str("x")}} {
+		if err := p.SetMeta(slug, bad); err == nil {
+			t.Fatalf("invalid meta accepted: %+v", bad)
+		}
+	}
+	d, _ := p.Detail(slug, nil)
+	prompt, _ := buildActionPrompt("lyrics.agent", "/skill", d.Dir, ActionRequest{}, d)
+	if !strings.Contains(prompt, "Thể loại: Bolero, trữ tình. Ngôn ngữ hát: Tiếng Anh.") {
+		t.Fatalf("agents should be told the genre and language:\n%s", prompt)
+	}
+	if body := sceneBody(d.Dir, d.Config); !strings.Contains(body, "image_style") || !strings.Contains(body, "Nostalgic") {
+		t.Fatalf("scene planning should ask for a genre image style:\n%s", body)
+	}
+}

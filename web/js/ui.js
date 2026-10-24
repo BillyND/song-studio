@@ -161,8 +161,11 @@ function inline(s) {
 }
 
 // PresetChips offers the saved prompt snippets (Cài đặt → Prompt mở rộng) as one-click inserts.
-export function PresetChips({ value, onChange }) {
-  const presets = useStore((s) => s.boot?.config?.presets || []);
+export function PresetChips({ value, onChange, genre }) {
+  const own = useStore((s) => s.boot?.config?.presets || []);
+  const genres = useStore((s) => s.boot?.genres || []);
+  // the song's genre suggestions first, then the user's own snippets
+  const presets = [...(genres.find((g) => g.id === genre)?.presets || []), ...own];
   if (!presets.length) return null;
   const add = (t) => {
     if ((value || "").includes(t)) return;
@@ -175,4 +178,18 @@ export function PresetChips({ value, onChange }) {
 
 export function Field({ label, children, hint }) {
   return html`<label class="field">${label}${children}${hint && html`<span class="muted small" style="font-weight:400">${hint}</span>`}</label>`;
+}
+
+// GenrePicker chooses a song's genre and sung language; the UI itself stays Vietnamese.
+export function GenrePicker({ genre, language, onChange }) {
+  const genres = useStore((s) => s.boot?.genres || []);
+  const languages = useStore((s) => s.boot?.languages || []);
+  return html`<div class="form-row">
+    <div class="grow"><${Field} label="Thể loại" hint="Chọn để agent phối và lên cảnh đúng chất; để trống thì suy ra từ bài mẫu.">
+      <select class="select" value=${genre || ""} onChange=${(e) => onChange({ genre: e.target.value })} aria-label="Thể loại">
+        <option value="">Chưa chọn</option>${genres.map((g) => html`<option value=${g.id}>${g.label}</option>`)}</select></${Field}></div>
+    <div class="grow"><${Field} label="Ngôn ngữ hát" hint="Dùng khi canh lời theo giọng hát.">
+      <select class="select" value=${language || "vi"} onChange=${(e) => onChange({ language: e.target.value })} aria-label="Ngôn ngữ hát">
+        ${languages.map((l) => html`<option value=${l.id}>${l.label}</option>`)}</select></${Field}></div>
+  </div>`;
 }

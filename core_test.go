@@ -103,11 +103,11 @@ func TestProjectCreateAndSteps(t *testing.T) {
 	c.ProjectsDir = filepath.Join(home, "songs")
 	cs.cfg = c
 	p := Projects{cfg: cs}
-	slug, err := p.Create("Huế", "Mộng Mơ", "Huế ơi mộng mơ sông Hương\nThuyền ai lờ lững vấn vương câu hò", [][2]string{{"Sáng tác: ", "Nguyễn Văn Thanh"}})
+	slug, err := p.Create("Huế", "Mộng Mơ", "Huế ơi mộng mơ sông Hương\nThuyền ai lờ lững vấn vương câu hò", [][2]string{{"Sáng tác: ", "Nguyễn Văn Thanh"}}, "", "")
 	if err != nil || slug != "hue-mong-mo" {
 		t.Fatalf("create: %v %q", err, slug)
 	}
-	if again, _ := p.Create("Huế", "Mộng Mơ", "x", nil); again != "hue-mong-mo-2" {
+	if again, _ := p.Create("Huế", "Mộng Mơ", "x", nil, "", ""); again != "hue-mong-mo-2" {
 		t.Fatalf("duplicate slug not suffixed: %q", again)
 	}
 	d, err := p.Detail(slug, map[string]string{"align": "run1"})
@@ -254,7 +254,7 @@ func TestVideoStampsDriveStaleness(t *testing.T) {
 	c.ProjectsDir = filepath.Join(home, "songs")
 	cs.cfg = c
 	p := Projects{cfg: cs}
-	slug, _ := p.Create("Đà Lạt", "", "a\nb", nil)
+	slug, _ := p.Create("Đà Lạt", "", "a\nb", nil, "", "")
 	d, _ := p.Detail(slug, nil)
 	os.WriteFile(filepath.Join(d.Dir, "Đà Lạt - Karaoke.mp4"), []byte("v"), 0o644)
 	if err := p.RecordStamp(slug, "render", videoInputsHash(d.Dir)); err != nil {
@@ -384,7 +384,7 @@ func TestReferenceSongs(t *testing.T) {
 	c.ProjectsDir = filepath.Join(home, "songs")
 	cs.cfg = c
 	p := Projects{cfg: cs}
-	slug, _ := p.Create("Ninh Bình", "", "a", nil)
+	slug, _ := p.Create("Ninh Bình", "", "a", nil, "", "")
 	step := func(id string) Step {
 		d, _ := p.Detail(slug, nil)
 		for _, s := range d.Steps {
@@ -548,7 +548,7 @@ func TestVideoPipelineBeforeAlignment(t *testing.T) {
 	c.SkillDir = t.TempDir()
 	cs.cfg = c
 	p := Projects{cfg: cs}
-	slug, _ := p.Create("Ninh Bình", "Đẹp Tựa Vần Thơ", "a", nil)
+	slug, _ := p.Create("Ninh Bình", "Đẹp Tựa Vần Thơ", "a", nil, "", "")
 	p.ImportAudio(slug, "x.m4a", strings.NewReader("audio"))
 	d, _ := p.Detail(slug, nil)
 	specs, deps, err := pipelineSpecs("video", cs.Get(), d, ActionRequest{})
@@ -587,7 +587,7 @@ func TestProjectDetailListsNeverNull(t *testing.T) {
 	c.ProjectsDir = filepath.Join(home, "songs")
 	cs.cfg = c
 	p := Projects{cfg: cs}
-	slug, _ := p.Create("Bài", "", "a", nil)
+	slug, _ := p.Create("Bài", "", "a", nil, "", "")
 	d, _ := p.Detail(slug, nil)
 	b, _ := json.Marshal(d)
 	for _, k := range []string{"timings", "images", "stills", "videos", "refs", "steps"} {
@@ -637,7 +637,7 @@ func TestVideoChainFollowsStaleness(t *testing.T) {
 	c.SkillDir = t.TempDir()
 	cs.cfg = c
 	p := Projects{cfg: cs}
-	slug, _ := p.Create("Ninh Bình", "", "a", nil)
+	slug, _ := p.Create("Ninh Bình", "", "a", nil, "", "")
 	p.ImportAudio(slug, "a.m4a", strings.NewReader("audio1"))
 	d, _ := p.Detail(slug, nil)
 	// a finished song: timings newer than the audio, intro cut, scenes with images
@@ -673,7 +673,7 @@ func TestPipelineRefusedWhileRunning(t *testing.T) {
 	m, _ := newManager(t.TempDir(), func() (int, int) { return 1, 1 })
 	defer m.Shutdown(time.Second)
 	app := &App{cfg: cs, runs: m, projects: Projects{cfg: cs}, token: "tok", home: home, version: "t", build: "b", started: time.Now()}
-	slug, _ := app.projects.Create("Bài", "", "a", nil)
+	slug, _ := app.projects.Create("Bài", "", "a", nil, "", "")
 	d, _ := app.projects.Detail(slug, nil)
 	// a long-running job on the render step of this song
 	m.Submit(RunSpec{Kind: "script", Step: "render", Project: slug, Cwd: d.Dir, Argv: []string{"/bin/sh", "-c", "sleep 5"}})
@@ -724,7 +724,7 @@ func TestDeleteMovesToTrash(t *testing.T) {
 		h.ServeHTTP(w, r)
 		return w
 	}
-	slug, _ := app.projects.Create("Bài", "", "a", nil)
+	slug, _ := app.projects.Create("Bài", "", "a", nil, "", "")
 	d, _ := app.projects.Detail(slug, nil)
 	os.WriteFile(filepath.Join(d.Dir, "Bài - Karaoke.mp4"), []byte("v"), 0o644)
 	os.WriteFile(filepath.Join(d.Dir, "lyrics-copy.txt"), []byte("x"), 0o644)
@@ -767,7 +767,7 @@ func TestSheetStepAndAction(t *testing.T) {
 	c.ProjectsDir = filepath.Join(home, "songs")
 	cs.cfg = c
 	p := Projects{cfg: cs}
-	slug, _ := p.Create("Tô Lịch", "Giang Ơi", "a", nil)
+	slug, _ := p.Create("Tô Lịch", "Giang Ơi", "a", nil, "", "")
 	d, _ := p.Detail(slug, nil)
 	sheet := func() Step {
 		d, _ = p.Detail(slug, nil)

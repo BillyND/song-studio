@@ -60,14 +60,13 @@ type Preset struct {
 	Text  string `json:"text"`
 }
 
+// defaultPresets are genre-neutral; each genre adds its own suggestions (genres.go).
 var defaultPresets = []Preset{
 	{"Không bộ gõ", "Không dùng bộ gõ: không trống, không cajon, không hi-hat, không shaker; nhịp do đàn và câu hát dẫn dắt."},
-	{"Dân ca mượt mà", "Phong cách dân ca mượt mà: câu hát liền mạch, luyến láy vừa phải ở cuối câu, không ề à, không kéo lê, tempo vừa phải."},
-	{"Chất chèo Bắc Bộ", "Hơi hướng làn điệu chèo, dân ca đồng bằng Bắc Bộ (quê Ninh Bình) nhưng hiện đại, dễ nghe."},
-	{"Đàn bầu dẫn", "Đàn bầu dẫn giai điệu dạo và gian tấu, sáo trúc và đàn tranh đệm, dây nhẹ phía sau."},
-	{"Giọng nữ ngọt", "Giọng nữ trong, ngọt, luyến láy dân ca nhẹ nhàng."},
+	{"Giọng nữ ấm", "Giọng nữ trong, ấm, nhả chữ rõ."},
 	{"Giọng nam ấm", "Giọng nam trung ấm, tròn, nhả chữ rõ."},
-	{"Học phong cách, không chép", "Chỉ học phong cách từ bài mẫu (tiết tấu, chất vùng miền, dàn nhạc). Không chép giai điệu, lời hay câu nhạc đặc trưng của bài mẫu."},
+	{"Điệp khúc bùng nổ", "Verse nhẹ, điệp khúc dày và bùng nổ, điệp khúc cuối lên cao trào."},
+	{"Học phong cách, không chép", "Chỉ học phong cách từ bài mẫu (tiết tấu, dàn nhạc, màu giọng). Không chép giai điệu, lời hay câu nhạc đặc trưng của bài mẫu."},
 }
 
 var agentNames = []string{"claude", "omp", "codex"}

@@ -139,6 +139,8 @@ type projectConfig struct {
 	Scenes   []sceneCfg `json:"scenes"`
 	Profile  string     `json:"profile"`
 	Vocal    string     `json:"vocal"`
+	Genre    string     `json:"genre"`
+	Language string     `json:"language"`
 }
 
 type sceneCfg struct {
@@ -403,10 +405,24 @@ func deriveSteps(dir string, pc projectConfig, d ProjectDetail, active map[strin
 }
 
 // Create makes a new project folder with lyrics.txt and a starter project.json.
-func (p Projects) Create(title, subtitle, lyrics string, credits [][2]string) (string, error) {
+func (p Projects) Create(title, subtitle, lyrics string, credits [][2]string, genre, language string) (string, error) {
 	title = strings.TrimSpace(title)
 	if title == "" {
 		return "", errors.New("cần tên bài")
+	}
+	theme := "truyen-thong"
+	if genre != "" {
+		g := findGenre(genre)
+		if g == nil {
+			return "", errors.New("thể loại không hợp lệ")
+		}
+		theme = g.Theme
+	}
+	if language == "" {
+		language = "vi"
+	}
+	if !validLanguage(language) {
+		return "", errors.New("ngôn ngữ không hợp lệ")
 	}
 	if err := os.MkdirAll(p.root(), 0o755); err != nil {
 		return "", err
@@ -433,7 +449,8 @@ func (p Projects) Create(title, subtitle, lyrics string, credits [][2]string) (s
 	}
 	cfg := map[string]any{
 		"title": title, "subtitle": strings.TrimSpace(subtitle), "credits": cr,
-		"karaoke_color": "pink", "badge": false, "scenes": []any{},
+		"genre": genre, "language": language, "video_theme": theme, "karaoke_color": themeKaraoke[theme],
+		"badge": false, "scenes": []any{},
 	}
 	return slug, writeJSONAtomic(filepath.Join(dir, "project.json"), cfg, 0o644)
 }
@@ -518,7 +535,10 @@ func videoInputsHash(dir string) string {
 	var cfg map[string]json.RawMessage
 	raw, _ := os.ReadFile(filepath.Join(dir, "project.json"))
 	_ = json.Unmarshal(raw, &cfg)
-	for _, k := range []string{"audio", "title", "subtitle", "credits", "karaoke_color", "badge", "scenes", "intro_cut"} {
+	for _, k := range []string{"audio", "title", "subtitle", "credits", "karaoke_color", "video_theme", "badge", "scenes", "intro_cut"} {
+		if k == "video_theme" && cfg[k] == nil {
+			continue // added later: songs without it keep the fingerprint their video was stamped with
+		}
 		h.Write([]byte(k))
 		h.Write(cfg[k])
 	}

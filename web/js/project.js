@@ -1,7 +1,7 @@
 // One song's workspace: the eight-step workflow with script and agent actions.
 import { html, useState, useEffect, useRef, api, toast, toastError, openRun, bumpRuns, go, ago, secs, bytes, media, copyText, useStore, runDuration, store } from "./core.js";
 import { Icon } from "./icons.js";
-import { Btn, StatusPill, Seg, Switch, Modal, Lightbox, Markdown, Empty, AgentPicker, useAgentChoice, AgentIcon, Field, PresetChips } from "./ui.js";
+import { Btn, StatusPill, Seg, Switch, Modal, Lightbox, Markdown, Empty, AgentPicker, useAgentChoice, AgentIcon, Field, PresetChips, GenrePicker } from "./ui.js";
 
 const STEP_ICON = { lyrics: "type", suno: "sparkles", audio: "music", align: "mic", trim: "scissors", scenes: "image", stills: "eye", render: "film", sheet: "sheet" };
 
@@ -254,6 +254,14 @@ function RefsPanel({ d, slug, reload, stamp }) {
   </div>`;
 }
 
+// looksLucBat: most lines have 6 or 8 syllables, so the lục bát checker is worth offering.
+function looksLucBat(text) {
+  const lines = text.split("\n").map((l) => l.replace(/[,.!?;:"“”]/g, " ").trim()).filter(Boolean);
+  if (lines.length < 4) return false;
+  const fit = lines.filter((l) => [6, 7, 8, 9].includes(l.split(/\s+/).length)).length;
+  return fit / lines.length >= 0.6;
+}
+
 function LyricsStep({ d, slug, reload, stamp }) {
   const [text, setText] = useState(d.lyrics);
   const [brief, setBrief] = useState(d.brief);
@@ -261,6 +269,8 @@ function LyricsStep({ d, slug, reload, stamp }) {
   const [fixAll, setFixAll] = useState(false);
   const ag = useAgentChoice();
   const [busy, save] = useSave(slug, reload);
+  const cfg = safeJSON(d.config);
+  const setMeta = (v) => api(`/api/projects/${encodeURIComponent(slug)}/meta`, { method: "PATCH", body: v }).then(reload).catch(toastError);
   useEffect(() => setText(d.lyrics), [d.lyrics]);
   useEffect(() => setBrief(d.brief), [d.brief]);
   const dirty = text !== d.lyrics || brief !== d.brief;
@@ -286,7 +296,8 @@ function LyricsStep({ d, slug, reload, stamp }) {
   const issues = check ? check.filter((r) => r.notes.some((n) => !n.startsWith("có tiếng đệm"))).length : 0;
   return html`<div class="stack">
     <div class="section-title"><${Icon} name="type" /><h3>Lời bài hát</h3><span class="spacer"></span>
-      <${Btn} size="sm" icon="check" onClick=${runCheck}>Kiểm tra lục bát</${Btn}></div>
+      ${(cfg.language || "vi") === "vi" && looksLucBat(text) && html`<${Btn} size="sm" icon="check" onClick=${runCheck}>Kiểm tra lục bát</${Btn}>`}</div>
+    <${GenrePicker} genre=${cfg.genre} language=${cfg.language} onChange=${setMeta} />
     <textarea class="textarea" rows="12" value=${text} onInput=${(e) => setText(e.target.value)} onKeyDown=${(e) => (e.metaKey || e.ctrlKey) && e.key === "s" && (e.preventDefault(), saveAll())}></textarea>
     ${check && html`<div class="card flat"><div class="card-head"><h3>Lục bát</h3><span class=${"pill " + (issues ? "warn" : "ok")}>${issues ? `${issues} dòng cần xem` : "Ổn"}</span></div>
       <div class="scroll-x" style="max-height:320px"><table class="table"><thead><tr><th>#</th><th>Lời</th><th>Chữ</th><th>Ghi chú</th></tr></thead><tbody>
@@ -300,7 +311,7 @@ function LyricsStep({ d, slug, reload, stamp }) {
     <div class="section-title"><${Icon} name="wand" /><h3>Yêu cầu mở rộng</h3><span class="muted small">không bắt buộc</span></div>
     <textarea class="textarea" rows="4" placeholder="Ví dụ: phong cách dân ca mượt mà nhưng không ề à, không dùng bộ gõ…" value=${brief}
       onInput=${(e) => setBrief(e.target.value)} onKeyDown=${(e) => (e.metaKey || e.ctrlKey) && e.key === "s" && (e.preventDefault(), saveAll())}></textarea>
-    <${PresetChips} value=${brief} onChange=${setBrief} />
+    <${PresetChips} genre=${cfg.genre} value=${brief} onChange=${setBrief} />
 
     <div class="cta">
       <div class="cta-fields">
@@ -445,11 +456,22 @@ function JsonEditor({ d, slug, reload, onClose }) {
   </${Modal}>`;
 }
 
-function StillsStep({ d, slug, stamp }) {
+const THEMES = [
+  { value: "truyen-thong", label: "Truyền thống", hint: "Chữ viết tay vàng cam, chữ chạy hồng. Hợp quê hương, thiếu nhi." },
+  { value: "hien-dai", label: "Hiện đại", hint: "Chữ đậm trắng xanh, chữ chạy xanh. Hợp pop, ballad, rock, rap." },
+  { value: "co-dien", label: "Cổ điển", hint: "Chữ có chân kem vàng, chữ chạy vàng. Hợp bolero, trữ tình, thánh ca." },
+];
+
+function StillsStep({ d, slug, stamp, reload }) {
   const [box, setBox] = useState(null);
   const [times, setTimes] = useState("");
+  const cfg = safeJSON(d.config);
+  const theme = THEMES.find((t) => t.value === cfg.video_theme) || THEMES[0];
+  const setTheme = (v) => api(`/api/projects/${encodeURIComponent(slug)}/meta`, { method: "PATCH", body: { videoTheme: v } }).then(reload).catch(toastError);
   const parsed = times.split(/[\s,]+/).map(Number).filter((n) => isFinite(n) && n >= 0 && times.trim());
   return html`<div class="stack">
+    <${Field} label="Kiểu video" hint=${theme.hint + " Đổi kiểu rồi render lại khung để xem."}>
+      <${Seg} value=${theme.value} onChange=${setTheme} options=${THEMES.map((t) => ({ value: t.value, label: t.label }))} /></${Field}>
     <${ActionCard} title="Render khung hình xem trước" hint="Mặc định: tựa đề, đếm ngược micro, giữa câu dài nhất, đoạn kết. Nhanh, vài giây mỗi khung"
       onRun=${() => runAction(slug, "stills", parsed.length ? { times: parsed } : {})} label="Render" icon="eye">
       <input class="input" style="width:200px" placeholder="giây tuỳ chọn: 8, 12.5, 90" value=${times} onInput=${(e) => setTimes(e.target.value)} />

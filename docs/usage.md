@@ -35,10 +35,11 @@ Flags: `-addr 127.0.0.1:4317`, `-no-open`, `-config`, `-data`, `-version`.
 |---|---|
 | `~/Music/suno-que-huong/<song>/` | one folder per song: `project.json`, `lyrics.txt`, `suno/`, audio, `img/`, `work/`, the MP4 |
 | `~/.claude/skills/suno-que-huong/` | the skill the agents and scripts follow |
-| `~/.config/que-huong-studio/config.json` | settings (default agent, permission mode, concurrency, CLI paths, folders) |
+| `~/.config/que-huong-studio/config.json` | settings (default agent, permission mode, concurrency, CLI paths, folders, image provider and model; never keys) |
+| login keychain, service `que-huong-studio` | image API keys (`image.hub`, `image.openai`, `image.gemini`), written through `security` on stdin |
 | `~/.local/share/que-huong-studio/runs/<id>/` | each run: `meta.json`, `events.jsonl`, raw `stdout.log`; the newest 300 are kept |
 | `~/.local/share/que-huong-studio/studio.log` | server log when started from the app (rotated to `studio.log.1` past 5 MB) |
-| `~/.config/suno-que-huong/aihub.key` | image API key read by the image script (mode 600); the studio never shows it |
+| `~/.config/suno-que-huong/aihub.key` | older hub key file; still read when the image script runs outside the studio, and importable into the keychain from Cài đặt |
 
 ## Workflow steps
 
@@ -95,11 +96,40 @@ Jobs are either heavy (vocal separation, alignment, analysis, stills, render: de
 time) or light (agents and image downloads: default 3 in parallel). Both limits are in Cài đặt.
 Default credits for new songs and the image model are there too.
 
+## Genres, sung language and video look
+
+Each song has a **Thể loại** (quê hương, bolero, ballad, pop, rock, rap, EDM, acoustic, thiếu
+nhi, thánh ca, nhạc cách mạng, or none) and a **Ngôn ngữ hát** (Vietnamese by default), chosen
+in Bài hát mới or at the top of step 1. The UI stays Vietnamese.
+
+- The agents are told both; the arrangement still follows the reference song and brief.
+- The genre's suggested snippets appear first among the prompt chips.
+- Canh lời aligns in the sung language; Kiểm tra lục bát only shows for Vietnamese lyrics
+  whose lines mostly have 6–9 syllables.
+- The scene planner writes an `image_style` for the whole song, seeded by the genre.
+- **Kiểu video** (step Xem trước): Truyền thống, Hiện đại or Cổ điển. Picking a genre sets
+  its look and karaoke colour; changing it makes the stills and video stale.
+
+Languages without spaces between words (Chinese, Japanese) align and wipe a whole line at a
+time rather than word by word.
+
 ## Prompt snippets
 
-Cài đặt → **Prompt mở rộng** holds reusable instructions (for example "Không bộ gõ", "Dân ca
-mượt mà"). They appear as one-click chips under every agent note, the free-task box, the skill
-change box and the brief; clicking appends the text.
+Cài đặt → **Prompt mở rộng** holds reusable instructions (for example "Không bộ gõ"). They
+appear as one-click chips under every agent note, the free-task box, the skill change box and
+the brief, after the current song's genre suggestions; clicking appends the text.
+
+## Image provider and keys
+
+Cài đặt → **Tạo ảnh** picks the provider: the current hub (OpenAI-compatible, default),
+OpenAI direct or Google Gemini, with a model per provider, size (16:9, default 2048x1152) and
+quality. Keys are pasted per provider, stored in the macOS keychain, shown only as their last
+four characters, and checked with **Kiểm tra** (a free model listing). The scene-image run is
+the only child that receives a key, through its environment when it starts; agents and every
+other run have image key variables removed, and keys never appear in run history or logs.
+Anything running under the same macOS account can still read the keychain, so use keys with
+a spending limit. Gemini support follows Google's documented API but has not been tried with
+a real key yet.
 
 ## Agents
 
@@ -142,6 +172,22 @@ at 390 px and 768 px in Chrome) for a narrow browser window on the Mac.
 
 ## Reliability
 
+- **Restart keeps the queue.** Quitting the studio leaves queued runs queued, puts running
+  scripts back in the queue (they are safe to repeat) and marks running agents
+  "Bị gián đoạn"; the next start carries on with the chain.
+- **Time limits.** Agents and renders stop after 90 minutes, other heavy scripts after 45,
+  light scripts after 30; the run fails with "quá giới hạn …".
+- **No half files.** Videos, trimmed audio, timings, sheets and images are written to a
+  `.part` file and renamed when complete.
+- **Image errors.** Network errors, 429 and 5xx are retried with backoff; a content refusal
+  or a rejected key stops that scene at once with the reason in Vietnamese.
+- **Locked Python.** `scripts/requirements-video.lock` pins every package with hashes, so a
+  friend's Mac gets the same environment.
+- **Kiểm tra máy** (top of Cài đặt) checks ffmpeg, uv, MuseScore, the skill, the Python
+  environment, model caches, agents, free disk space (warns under 5 GB) and the image key,
+  each with how to fix it. **Xuất gói chẩn đoán** downloads a zip with those checks, the
+  settings, the studio log tail and recent runs, keys redacted.
+
 - Chain links skip per-step preconditions (for example "no timings yet") because the link
   before them produces those inputs; each script checks again when it actually runs.
 - Every list in a song's data is an array, never `null`, and each page sits inside an error
@@ -178,6 +224,10 @@ left to the user by design).
 - **The first video step is slow**: `setup-video-env.sh` installs PyTorch, Whisper and Demucs
   once into `~/.local/share/suno-que-huong/`; later runs reuse it.
 - **Port busy**: another program owns 4317. Change `addr` in the config file.
+- **Images fail with "khoá API bị từ chối"**: paste the key again in Cài đặt → Tạo ảnh and
+  press Kiểm tra. **"bị từ chối vì nội dung"**: reword that scene's prompt in project.json.
+- **Something else is wrong**: Cài đặt → Kiểm tra máy shows what is missing; attach the
+  diagnostics zip when asking for help.
 
 ## Development
 

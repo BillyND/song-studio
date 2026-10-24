@@ -77,6 +77,7 @@ func (a *App) routes() http.Handler {
 	mux.HandleFunc("GET /api/projects", a.listProjects)
 	mux.HandleFunc("POST /api/projects", a.createProject)
 	mux.HandleFunc("GET /api/projects/{slug}", a.getProject)
+	mux.HandleFunc("PATCH /api/projects/{slug}/meta", a.patchMeta)
 	mux.HandleFunc("DELETE /api/projects/{slug}", a.deleteProject)
 	mux.HandleFunc("DELETE /api/projects/{slug}/video", a.deleteVideo)
 	mux.HandleFunc("PUT /api/projects/{slug}/files", a.putProjectFile)
@@ -179,7 +180,7 @@ func (a *App) bootstrap(w http.ResponseWriter, r *http.Request) {
 	cfg := a.cfg.Get()
 	writeJSON(w, 200, map[string]any{
 		"version": a.version, "config": cfg, "agents": agentInfos(cfg), "actions": workflowActions, "profiles": skillProfiles(cfg.SkillDir),
-		"skillExists": exists(filepath.Join(cfg.SkillDir, "SKILL.md")),
+		"skillExists": exists(filepath.Join(cfg.SkillDir, "SKILL.md")), "genres": genres, "languages": languages,
 	})
 }
 
@@ -279,12 +280,14 @@ func (a *App) createProject(w http.ResponseWriter, r *http.Request) {
 		Subtitle string      `json:"subtitle"`
 		Lyrics   string      `json:"lyrics"`
 		Credits  [][2]string `json:"credits"`
+		Genre    string      `json:"genre"`
+		Language string      `json:"language"`
 	}
 	if err := decode(r, &req); err != nil {
 		failFor(w, err)
 		return
 	}
-	slug, err := a.projects.Create(req.Title, req.Subtitle, req.Lyrics, req.Credits)
+	slug, err := a.projects.Create(req.Title, req.Subtitle, req.Lyrics, req.Credits, req.Genre, req.Language)
 	if err != nil {
 		failFor(w, err)
 		return
@@ -961,4 +964,19 @@ func (a *App) importLegacySecret(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, 200, map[string]any{"secrets": secretInfos(a.secrets)})
+}
+
+func (a *App) patchMeta(w http.ResponseWriter, r *http.Request) {
+	var m SongMeta
+	if err := decode(r, &m); err != nil {
+		failFor(w, err)
+		return
+	}
+	slug := r.PathValue("slug")
+	if err := a.projects.SetMeta(slug, m); err != nil {
+		failFor(w, err)
+		return
+	}
+	d, _ := a.detail(slug)
+	writeJSON(w, 200, d)
 }

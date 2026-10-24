@@ -111,7 +111,7 @@ func buildActionPrompt(action, skill, dir string, req ActionRequest, d ProjectDe
 			structural = "Người dùng đã đồng ý sửa hết: áp dụng cả các đề xuất cấu trúc và liệt kê chúng."
 		}
 		body = fmt.Sprintf(`Việc (một phần của chuỗi, chạy song song với việc phân tích bài mẫu): soát lời và chia đoạn cho %[1]s/lyrics.txt.
-- Soát lời theo references/lyric-review.md (chạy scripts/check-luc-bat.py). %[2]s
+- Soát lời theo references/lyric-review.md; chỉ chạy scripts/check-luc-bat.py khi lời là tiếng Việt có dạng lục bát. %[2]s
 - Chia đoạn theo mục "Mapping lyrics to sections" và ghi %[1]s/suno/lyrics.txt: lời đã gắn thẻ đoạn trơn như [Intro], [Verse 1], [Chorus], [Interlude], [Break], [Final Chorus], [Outro], [End], CHƯA ghi mô tả nhạc cụ trong thẻ (bước phối khí sẽ thêm).
 - Nếu chưa có "title"/"subtitle" trong %[1]s/project.json thì đặt theo mục Title (giữ nguyên các khoá khác).
 - Ghi %[1]s/suno/notes.md: danh sách sửa (cũ → mới), đề xuất chưa áp dụng, câu hỏi mở.
@@ -125,6 +125,7 @@ func buildActionPrompt(action, skill, dir string, req ActionRequest, d ProjectDe
 4. Lời đã chia đoạn: %[1]s/suno/lyrics.txt.
 Quy tắc:
 - Chỉ học phong cách từ bài mẫu (tempo, chất vùng miền, dàn nhạc, độ dày bộ gõ và bass, độ dài intro). Không chép giai điệu, lời, tên bài hay câu nhạc đặc trưng. Không đưa file bài mẫu lên Suno hay dịch vụ nào.
+- Styles hợp với thể loại ở trên (nếu chưa chọn thì suy ra từ bài mẫu và yêu cầu); ngôn ngữ hát ghi rõ trong Styles khi không phải tiếng Việt.
 - Styles tiếng Anh, dưới 1000 ký tự, mô tả theo hướng có gì vì Suno hiểu sai câu phủ định (ví dụ "không bộ gõ" thành "no percussion section; the pulse is carried by plucked strings and the vocal phrasing").
 Ghi ra:
 - %[1]s/suno/style.txt: nội dung ô Styles.
@@ -152,22 +153,34 @@ Ghi ra:
 		if len(d.Timings) == 0 {
 			return "", errors.New("chưa có timing: chạy bước Canh lời trước")
 		}
-		body = sceneBody(dir)
+		body = sceneBody(dir, d.Config)
 	default:
 		return "", fmt.Errorf("unknown agent action %q", action)
 	}
 	if strings.TrimSpace(req.Note) != "" {
 		body += "\nGhi chú thêm của người dùng: " + strings.TrimSpace(req.Note)
 	}
-	return head + "\n" + body, nil
+	if action == "scenes.agent" { // sceneBody already names the genre
+		return head + "\n" + body, nil
+	}
+	var pc projectConfig
+	_ = json.Unmarshal(d.Config, &pc)
+	return head + "\n" + genreLine(pc) + "\n" + body, nil
 }
 
-func sceneBody(dir string) string {
-	return fmt.Sprintf(`Việc: lên danh sách cảnh cho video theo references/karaoke-video.md (mục Plan scenes và Style contract).
+func sceneBody(dir string, config json.RawMessage) string {
+	var pc projectConfig
+	_ = json.Unmarshal(config, &pc)
+	style := "ảnh chụp điện ảnh chân thực, hợp nội dung lời"
+	if g := findGenre(pc.Genre); g != nil {
+		style = g.ImageStyle
+	}
+	return genreLine(pc) + "\n" + fmt.Sprintf(`Việc: lên danh sách cảnh cho video theo references/karaoke-video.md (mục Plan scenes và Style contract).
 - Đọc %[1]s/work/timings.json, %[1]s/lyrics.txt và %[1]s/project.json.
-- Ghi mảng "scenes" vào %[1]s/project.json, giữ nguyên các khoá khác. Mỗi cảnh: "id" dạng "NN-ten-ngan", "start" (giây, trùng đầu một câu), "prompt" tiếng Anh nêu đúng địa danh.
+- Ghi mảng "scenes" vào %[1]s/project.json, giữ nguyên các khoá khác. Mỗi cảnh: "id" dạng "NN-ten-ngan", "start" (giây, trùng đầu một câu), "prompt" tiếng Anh nêu đúng địa danh hoặc hình ảnh trong lời.
+- Ghi "image_style" vào %[1]s/project.json: một câu tiếng Anh về phong cách ảnh chung cho cả bài, hợp thể loại và lời, kết thúc bằng "No text, no letters, no watermark, no logo." Gợi ý cho thể loại này: %[2]s
 - Cảnh 1 là ảnh tựa đề (nửa trái trống), cảnh 2 bắt đầu khoảng 5 giây trước chữ hát đầu tiên, cảnh cuối dùng lại cảnh 1 với "reuse": true làm cảnh kết khoảng 15 giây trước khi hết bài.
-- Không tạo ảnh và không render.`, dir)
+- Không tạo ảnh và không render.`, dir, style)
 }
 
 // sceneRetimeBody keeps the existing scenes and images and only moves their start times
@@ -280,7 +293,7 @@ func pipelineSpecs(name string, cfg Config, d ProjectDetail, req ActionRequest) 
 		header := fmt.Sprintf(promptHeader, cfg.SkillDir, d.Dir) + "\n"
 		switch {
 		case len(pc.Scenes) == 0:
-			if err := addAgent("scenes.agent", header+sceneBody(d.Dir), last()); err != nil {
+			if err := addAgent("scenes.agent", header+sceneBody(d.Dir, d.Config), last()); err != nil {
 				return nil, nil, err
 			}
 		case realign:

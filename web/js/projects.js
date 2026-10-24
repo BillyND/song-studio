@@ -1,7 +1,7 @@
 // Song list and the "new song" dialog.
 import { html, useState, useEffect, api, toast, toastError, go, ago, bytes, media, useStore, openRun, bumpRuns } from "./core.js";
 import { Icon } from "./icons.js";
-import { Btn, Modal, Field, Empty, PresetChips, Switch } from "./ui.js";
+import { Btn, Modal, Field, Empty, PresetChips, Switch, GenrePicker } from "./ui.js";
 
 export function ProjectsPage() {
   const [list, setList] = useState(null);
@@ -11,7 +11,7 @@ export function ProjectsPage() {
   return html`<div class="page">
     <div class="page-head">
       <div><div class="eyebrow">Quê Hương Studio</div><h1>Bài hát</h1>
-        <div class="muted" style="margin-top:6px">Mỗi bài đi qua 9 bước, từ lời tới video karaoke và bản nhạc. Bấm vào một bài để làm tiếp.</div></div>
+        <div class="muted" style="margin-top:6px">Mỗi bài, thuộc thể loại nào cũng vậy, đi qua 9 bước: từ lời tới bài hát, video karaoke và bản nhạc. Bấm vào một bài để làm tiếp.</div></div>
       <${Btn} kind="primary" icon="plus" onClick=${() => setCreating(true)}>Bài mới</${Btn}>
     </div>
     ${list === null ? html`<div class="empty"><${Icon} name="loader" class="spin" size=${22} /></div>` : html`
@@ -45,7 +45,7 @@ const isVideo = (n) => /\.(mp4|webm|mov|mkv)$/i.test(n);
 function NewSong({ onClose }) {
   const boot = useStore((s) => s.boot);
   const defaults = boot?.config?.credits || [["Sáng tác: ", ""], ["Phổ nhạc: ", ""]];
-  const [form, setForm] = useState({ title: "", subtitle: "", lyrics: "", brief: "" });
+  const [form, setForm] = useState({ title: "", subtitle: "", lyrics: "", brief: "", genre: "", language: "vi" });
   const [credits, setCredits] = useState(defaults.map((c) => [...c]));
   const [autoPrompt, setAutoPrompt] = useState(true);
   // reference songs: picked Downloads paths and dropped/browsed File objects
@@ -63,7 +63,7 @@ function NewSong({ onClose }) {
     setBusy("Đang tạo bài…");
     let r;
     try {
-      r = await api("/api/projects", { method: "POST", body: { title: form.title, subtitle: form.subtitle, lyrics: form.lyrics, credits } });
+      r = await api("/api/projects", { method: "POST", body: { title: form.title, subtitle: form.subtitle, lyrics: form.lyrics, credits, genre: form.genre, language: form.language } });
     } catch (e) { toastError(e); setBusy(""); return; }
     try {
       const base = `/api/projects/${encodeURIComponent(r.slug)}`;
@@ -98,19 +98,20 @@ function NewSong({ onClose }) {
       <${Btn} kind="primary" icon="sparkles" busy=${!!busy} disabled=${!form.title.trim() || !form.lyrics.trim()} onClick=${submit}>Tạo bài</${Btn}>`}>
     <div class="stack">
       <div class="form-row">
-        <div class="grow"><${Field} label="Tên bài (dòng lớn trên ảnh tựa đề)"><input class="input" placeholder="Ninh Bình" value=${form.title} onInput=${set("title")} autofocus /></${Field}></div>
-        <div class="grow"><${Field} label="Dòng phụ"><input class="input" placeholder="Quê Hương" value=${form.subtitle} onInput=${set("subtitle")} /></${Field}></div>
+        <div class="grow"><${Field} label="Tên bài (dòng lớn trên ảnh tựa đề)"><input class="input" placeholder="Tên bài" value=${form.title} onInput=${set("title")} autofocus /></${Field}></div>
+        <div class="grow"><${Field} label="Dòng phụ"><input class="input" placeholder="không bắt buộc" value=${form.subtitle} onInput=${set("subtitle")} /></${Field}></div>
       </div>
+      <${GenrePicker} genre=${form.genre} language=${form.language} onChange=${(v) => setForm((f) => ({ ...f, ...v }))} />
       <div class="form-row">${credits.map((c, i) => html`
         <div class="grow"><${Field} label=${c[0].replace(/:\s*$/, "")}><input class="input" value=${c[1]} onInput=${(e) => { const v = e.target.value; setCredits((cs) => cs.map((x, j) => (j === i ? [x[0], v] : x))); }} /></${Field}></div>`)}
       </div>
       <${Field} label=${`Lời bài hát${lines ? ` · ${lines} dòng` : ""}`} hint="Dán nguyên lời. Bước 1 sẽ soát chính tả, địa danh và chia đoạn.">
-        <textarea class="textarea" rows="9" placeholder="Cảm ơn mẹ đã yêu cha…" value=${form.lyrics} onInput=${set("lyrics")}></textarea>
+        <textarea class="textarea" rows="9" placeholder="Dán lời bài hát…" value=${form.lyrics} onInput=${set("lyrics")}></textarea>
       </${Field}>
 
       <div class="divider"></div>
       <div><div class="row"><${Icon} name="wand" /><h3>Bài mẫu & yêu cầu</h3><span class="muted small">không bắt buộc</span></div>
-        <div class="muted small" style="margin-top:4px">Bài mẫu chỉ để agent học phong cách (tiết tấu, chất vùng miền, dàn nhạc), được phân tích trên máy và không gửi lên Suno.</div></div>
+        <div class="muted small" style="margin-top:4px">Bài mẫu chỉ để agent học phong cách (tiết tấu, dàn nhạc, màu giọng), được phân tích trên máy và không gửi lên Suno.</div></div>
       <div class=${"dropzone" + (over ? " over" : "")} style="padding:16px" onDragOver=${(e) => { e.preventDefault(); setOver(true); }} onDragLeave=${() => setOver(false)}
         onDrop=${(e) => { e.preventDefault(); setOver(false); addFiles(e.dataTransfer.files); }}>
         <${Icon} name="upload" size=${20} /><div style="margin:6px 0 2px;font-weight:600">Kéo bài mẫu vào đây</div>
@@ -126,9 +127,9 @@ function NewSong({ onClose }) {
         <${Btn} size="sm" kind="ghost" icon="x" title="Bỏ" onClick=${() => setRefs(refs.filter((_, j) => j !== i))} /></div>`)}
         ${!autoPrompt && html`<${Switch} on=${analyze} onChange=${setAnalyze}>Phân tích bài mẫu ngay sau khi tạo</${Switch}>`}</div>`}
       <${Field} label="Yêu cầu mở rộng" hint="Ví dụ lời dặn của người đặt bài. Agent dùng khi tạo kiểu phối riêng ở bước 0.">
-        <textarea class="textarea" rows="3" style="min-height:70px" placeholder="Phong cách dân ca mượt mà nhưng không ề à, không dùng bộ gõ…" value=${form.brief} onInput=${set("brief")}></textarea>
+        <textarea class="textarea" rows="3" style="min-height:70px" placeholder="Ví dụ: nhịp vừa, giọng nữ ấm, điệp khúc bùng nổ…" value=${form.brief} onInput=${set("brief")}></textarea>
       </${Field}>
-      <${PresetChips} value=${form.brief} onChange=${(v) => setForm((f) => ({ ...f, brief: v }))} />
+      <${PresetChips} genre=${form.genre} value=${form.brief} onChange=${(v) => setForm((f) => ({ ...f, brief: v }))} />
       <div class="divider"></div>
       <${Switch} on=${autoPrompt} onChange=${setAutoPrompt}>Tạo prompt Suno ngay: agent ${boot?.config?.defaultAgent || "claude"} soát lời song song với phân tích bài mẫu, rồi phối khí theo yêu cầu</${Switch}>
     </div>

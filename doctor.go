@@ -164,16 +164,23 @@ func (a *App) doctorHandler(w http.ResponseWriter, r *http.Request) {
 // keyPatterns catch API keys that slipped into logs, whatever their source.
 var keyPatterns = regexp.MustCompile(`(sk-[A-Za-z0-9_\-]{12,}|AIza[0-9A-Za-z_\-]{20,}|(?i:bearer)\s+[A-Za-z0-9._\-]{12,})`)
 
-func (a *App) redact(s string) string {
+// redactor looks up the stored keys once and returns a function that hides them and key-shaped text.
+func (a *App) redactor() func(string) string {
+	keys := []string{}
 	for _, n := range secretNames {
 		if v, err := a.secrets.Get(n); err == nil && len(v) >= 8 {
-			s = strings.ReplaceAll(s, v, "[đã che]")
+			keys = append(keys, v)
 		}
 	}
 	if v := readLegacyHubKey(a.home); len(v) >= 8 {
-		s = strings.ReplaceAll(s, v, "[đã che]")
+		keys = append(keys, v)
 	}
-	return keyPatterns.ReplaceAllString(s, "[đã che]")
+	return func(s string) string {
+		for _, k := range keys {
+			s = strings.ReplaceAll(s, k, "[đã che]")
+		}
+		return keyPatterns.ReplaceAllString(s, "[đã che]")
+	}
 }
 
 // diagnostics streams a zip to send along with a bug report: checks, settings, the
@@ -183,9 +190,10 @@ func (a *App) diagnostics(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="que-huong-studio-chan-doan-%s.zip"`, time.Now().Format("060102-1504")))
 	z := zip.NewWriter(w)
 	defer z.Close()
+	redact := a.redactor()
 	put := func(name, body string) {
 		if f, err := z.Create(name); err == nil {
-			_, _ = io.WriteString(f, a.redact(body))
+			_, _ = io.WriteString(f, redact(body))
 		}
 	}
 	checks, _ := json.MarshalIndent(a.doctor(), "", " ")
@@ -198,6 +206,9 @@ func (a *App) diagnostics(w http.ResponseWriter, r *http.Request) {
 	sort.Slice(metas, func(i, j int) bool { return metas[i].Created.After(metas[j].Created) })
 	for _, m := range metas {
 		m.Prompt = "" // prompts carry lyrics; the meta is enough to diagnose
+		if m.Kind == "agent" {
+			m.Argv = nil // an agent's argv repeats the prompt
+		}
 		b, _ := json.MarshalIndent(m, "", " ")
 		put("runs/"+m.ID+"/meta.json", string(b))
 		if m.Status == "failed" || m.Status == "interrupted" {

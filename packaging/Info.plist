@@ -5,12 +5,24 @@
   <key>CFBundleName</key><string>Quê Hương Studio</string>
   <key>CFBundleDisplayName</key><string>Quê Hương Studio</string>
   <key>CFBundleIdentifier</key><string>local.que-huong-studio</string>
-  <key>CFBundleVersion</key><string>1.0.0</string>
-  <key>CFBundleShortVersionString</key><string>1.0.0</string>
+  <key>CFBundleVersion</key><string>__VERSION__</string>
+  <key>CFBundleShortVersionString</key><string>__VERSION__</string>
   <key>CFBundlePackageType</key><string>APPL</string>
-  <key>CFBundleExecutable</key><string>launcher</string>
+  <key>CFBundleExecutable</key><string>QueHuongStudio</string>
   <key>CFBundleIconFile</key><string>AppIcon</string>
-  <key>LSUIElement</key><true/>
+  <key>CFBundleDevelopmentRegion</key><string>vi</string>
+  <key>CFBundleLocalizations</key><array><string>vi</string></array>
   <key>LSMinimumSystemVersion</key><string>13.0</string>
+  <key>LSApplicationCategoryType</key><string>public.app-category.music</string>
+  <key>NSHumanReadableCopyright</key><string>Quê Hương Studio — chạy trên máy bạn</string>
+  <key>NSHighResolutionCapable</key><true/>
+  <!-- the window talks only to the studio's own server on 127.0.0.1 -->
+  <key>NSAppTransportSecurity</key><dict><key>NSAllowsLocalNetworking</key><true/></dict>
+  <!-- Sparkle: new versions come from the public releases repo, signed with the EdDSA key below -->
+  <key>SUFeedURL</key><string>https://github.com/BillyND/que-huong-studio-releases/releases/latest/download/appcast.xml</string>
+  <key>SUPublicEDKey</key><string>__SPARKLE_KEY__</string>
+  <key>SUEnableAutomaticChecks</key><true/>
+  <key>SUAutomaticallyUpdate</key><true/>
+  <key>SUScheduledCheckInterval</key><integer>3600</integer>
 </dict>
 </plist>

@@ -141,7 +141,10 @@ func imageEnv(cfg Config, store SecretStore) []string {
 		"QH_IMAGE_SIZE=" + im.Size,
 		"QH_IMAGE_QUALITY=" + im.Quality,
 	}
-	if im.Provider == "hub" && im.BaseURL != "" {
+	if im.Provider == "hub" {
+		if !validBaseURL(im.BaseURL) {
+			return env // no key for an address the user did not validly choose; the script reports it
+		}
 		env = append(env, "QH_IMAGE_BASE_URL="+im.BaseURL)
 	}
 	if key, err := store.Get("image." + im.Provider); err == nil && key != "" {
@@ -157,6 +160,9 @@ func checkImageKey(cfg Config, provider, key string, client *http.Client) error 
 	case "hub", "openai":
 		base := "https://api.openai.com/v1"
 		if provider == "hub" {
+			if !validBaseURL(cfg.Image.BaseURL) {
+				return errors.New("địa chỉ hub ảnh không hợp lệ")
+			}
 			base = strings.TrimRight(cfg.Image.BaseURL, "/")
 		}
 		req, _ = http.NewRequest("GET", base+"/models", nil)

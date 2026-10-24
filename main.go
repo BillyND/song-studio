@@ -28,6 +28,7 @@ func main() {
 		addr       = flag.String("addr", "", "listen address (default from config, 127.0.0.1:4317)")
 		noOpen     = flag.Bool("no-open", false, "do not open the browser")
 		showVer    = flag.Bool("version", false, "print version")
+		bundled    = flag.String("bundled-skill", "", "skill snapshot shipped inside the app, installed into the skill folder when newer")
 	)
 	flag.Parse()
 	if *showVer {
@@ -42,6 +43,14 @@ func main() {
 		c := cfg.Get()
 		c.Addr = *addr
 		cfg.cfg = c
+	}
+	if *bundled != "" {
+		note, err := syncBundledSkill(*bundled, cfg.Get().SkillDir, filepath.Join(*dataDir, "skill-installed.json"), filepath.Join(*dataDir, "skill-backups"))
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "skill:", err) // the studio still runs on the skill already there
+		} else {
+			fmt.Println("skill:", note)
+		}
 	}
 	listen := cfg.Get().Addr
 	if host, _, err := net.SplitHostPort(listen); err != nil || (host != "127.0.0.1" && host != "localhost" && host != "::1") {
@@ -72,6 +81,9 @@ func main() {
 		}
 	}
 	runs.SecretEnv = app.secretEnv
+	runs.RebuildArgv = func(spec RunSpec) ([]string, error) {
+		return agentArgv(cfg.Get(), spec.Agent, spec.Model, spec.Prompt, spec.Cwd)
+	}
 	runs.Start()
 	srv := &http.Server{Handler: app.routes(), ReadHeaderTimeout: 10 * time.Second}
 

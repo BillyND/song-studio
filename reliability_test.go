@@ -26,8 +26,17 @@ func TestImageConfigMigration(t *testing.T) {
 	if im.Provider != "hub" || im.Models["hub"] != "gpt-image-old" || im.Models["openai"] == "" || im.Size != "2048x1152" {
 		t.Fatalf("migrated image config %+v", im)
 	}
-	if im.BaseURL != defaultImage.BaseURL {
-		t.Fatalf("plain http to another host must be refused: %s", im.BaseURL)
+	// an invalid hub address is kept as typed (never silently swapped for another host) and gets no key
+	if im.BaseURL != "http://evil.example/v1" || validBaseURL(im.BaseURL) {
+		t.Fatalf("invalid base URL handling: %s", im.BaseURL)
+	}
+	store := &memStore{}
+	store.Set("image.hub", "hub-key-123456789")
+	if env := strings.Join(imageEnv(cs.Get(), store), " "); strings.Contains(env, "hub-key") {
+		t.Fatalf("no key may go to an invalid hub address: %s", env)
+	}
+	if _, err := cs.Update(cs.Get(), home); err == nil {
+		t.Fatal("saving settings with an invalid hub address must fail")
 	}
 	if cs.Get().ImageModel != "" {
 		t.Fatal("legacy imageModel should be cleared after migration")
@@ -281,5 +290,88 @@ func TestGenreLanguageAndTheme(t *testing.T) {
 	}
 	if body := sceneBody(d.Dir, d.Config); !strings.Contains(body, "image_style") || !strings.Contains(body, "Nostalgic") {
 		t.Fatalf("scene planning should ask for a genre image style:\n%s", body)
+	}
+}
+
+func TestValidBaseURL(t *testing.T) {
+	ok := []string{"https://aihub.tigrendev.com/v1", "https://api.openai.com/v1", "http://127.0.0.1:8080/v1", "http://localhost:4000/v1", "http://[::1]:9000/v1"}
+	bad := []string{"http://127.0.0.1@evil.example/v1", "http://localhost.evil.example/v1", "http://192.168.1.5:8080/v1",
+		"htps://x/v1", "https://user:pw@host/v1", "ftp://host", "", "https://host/v1?x=1"}
+	for _, u := range ok {
+		if !validBaseURL(u) {
+			t.Errorf("should accept %s", u)
+		}
+	}
+	for _, u := range bad {
+		if validBaseURL(u) {
+			t.Errorf("should refuse %s", u)
+		}
+	}
+}
+
+func TestSetMetaSafety(t *testing.T) {
+	home := t.TempDir()
+	cs, _ := loadConfig(filepath.Join(home, "c.json"), home)
+	c := cs.Get()
+	c.ProjectsDir = filepath.Join(home, "songs")
+	cs.cfg = c
+	p := Projects{cfg: cs}
+	slug, _ := p.Create("Bài", "", "a", nil, "pop", "vi")
+	pj := filepath.Join(c.ProjectsDir, slug, "project.json")
+	str := func(s string) *string { return &s }
+	// a theme picked by hand survives a genre change
+	p.SetMeta(slug, SongMeta{Theme: str("co-dien")})
+	p.SetMeta(slug, SongMeta{Genre: str("rock")})
+	var m map[string]any
+	b, _ := os.ReadFile(pj)
+	json.Unmarshal(b, &m)
+	if m["video_theme"] != "co-dien" || m["genre"] != "rock" {
+		t.Fatalf("chosen theme must be kept: %v", m)
+	}
+	// an empty file (another writer mid-write) is never replaced by a stub
+	os.WriteFile(pj, nil, 0o644)
+	if err := p.SetMeta(slug, SongMeta{Genre: str("pop")}); err == nil {
+		t.Fatal("SetMeta must refuse an empty project.json")
+	}
+	if b, _ := os.ReadFile(pj); len(b) != 0 {
+		t.Fatalf("project.json was rewritten: %s", b)
+	}
+}
+
+func TestStopAfterRequeueDoesNotPanic(t *testing.T) {
+	data := t.TempDir()
+	m, _ := newManager(data, func() (int, int) { return 1, 1 })
+	m.Start()
+	meta, _ := m.Submit(RunSpec{Kind: "script", Cwd: data, Heavy: true, Argv: []string{"/bin/sh", "-c", "sleep 20"}})
+	waitStatus(t, m, meta.ID, "running")
+	m.Shutdown(5 * time.Second)
+	if err := m.Stop(meta.ID); err != nil { // the HTTP server can still take a stop while shutting down
+		t.Fatal(err)
+	}
+}
+
+func TestCleanExitAtLimitIsSuccess(t *testing.T) {
+	data := t.TempDir()
+	m, _ := newManager(data, func() (int, int) { return 1, 1 })
+	defer m.Shutdown(time.Second)
+	m.Start()
+	meta, _ := m.Submit(RunSpec{Kind: "script", Cwd: data, TimeoutSec: 1, Argv: []string{"/bin/sh", "-c", "trap 'exit 0' TERM; sleep 5 & wait"}})
+	got := waitStatus(t, m, meta.ID, "succeeded", "failed", "stopped")
+	if got.Status != "succeeded" {
+		t.Fatalf("a run that exits 0 when the limit hits is a success: %+v", got)
+	}
+}
+
+func TestResumedAgentRebuildsArgv(t *testing.T) {
+	data := t.TempDir()
+	m, _ := newManager(data, func() (int, int) { return 0, 0 }) // nothing starts in the first process
+	meta, _ := m.Submit(RunSpec{Kind: "agent", Cwd: data, Prompt: "p", Argv: []string{"/bin/sh", "-c", "exit 7"}})
+	m.Shutdown(time.Second)
+	m2, _ := newManager(data, func() (int, int) { return 1, 1 })
+	defer m2.Shutdown(time.Second)
+	m2.RebuildArgv = func(spec RunSpec) ([]string, error) { return []string{"/bin/sh", "-c", "exit 0"}, nil }
+	m2.Start()
+	if got := waitStatus(t, m2, meta.ID, "succeeded", "failed"); got.Status != "succeeded" {
+		t.Fatalf("a resumed agent must run with the current settings: %+v", got)
 	}
 }

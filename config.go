@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"errors"
+	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -196,6 +197,9 @@ func (s *ConfigStore) Get() Config {
 // Update replaces editable fields; Addr changes apply on next start.
 func (s *ConfigStore) Update(next Config, home string) (Config, error) {
 	normalizeConfig(&next, home)
+	if !validBaseURL(next.Image.BaseURL) {
+		return Config{}, errors.New("địa chỉ hub ảnh không hợp lệ: dùng https://…, hoặc http:// chỉ với 127.0.0.1 hay localhost")
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.cfg = next
@@ -245,15 +249,32 @@ func contains(list []string, v string) bool {
 	return false
 }
 
+// validBaseURL accepts https to any host, or plain http only to this machine (a local gateway).
+// It refuses user info ("http://127.0.0.1@evil.example") and look-alike hosts.
+func validBaseURL(s string) bool {
+	u, err := url.Parse(s)
+	if err != nil || u.User != nil || u.Host == "" || u.RawQuery != "" || u.Fragment != "" {
+		return false
+	}
+	switch u.Scheme {
+	case "https":
+		return true
+	case "http":
+		h := u.Hostname()
+		return h == "127.0.0.1" || h == "localhost" || h == "::1"
+	}
+	return false
+}
+
 func normalizeImage(im *ImageConfig, legacyModel string) {
 	if !slices.Contains(imageProviders, im.Provider) {
 		im.Provider = defaultImage.Provider
 	}
-	// plain http only to this machine (a local gateway); anything else must be https
-	local := strings.HasPrefix(im.BaseURL, "http://127.0.0.1") || strings.HasPrefix(im.BaseURL, "http://localhost")
-	if !strings.HasPrefix(im.BaseURL, "https://") && !local {
+	im.BaseURL = strings.TrimSpace(im.BaseURL)
+	if im.BaseURL == "" {
 		im.BaseURL = defaultImage.BaseURL
 	}
+	// an invalid URL is kept as typed: Update refuses it, and imageEnv sends no key to it
 	models := map[string]string{}
 	for _, p := range imageProviders {
 		models[p] = strings.TrimSpace(im.Models[p])

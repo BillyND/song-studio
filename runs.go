@@ -73,9 +73,17 @@ type run struct {
 	// timedOut, requeue and interrupted say why a stopped run ended: past its time limit,
 	// or the studio quit (a script runs again on the next start, an agent does not).
 	timedOut, requeue, interrupted bool
-	logFile                        *os.File
-	done                           chan struct{}
+	// exited is set once the child has been waited for, so a late timeout cannot touch it
+	exited bool
+	// resumed runs were queued by an earlier studio process; agents rebuild their command
+	resumed  bool
+	logFile  *os.File
+	done     chan struct{}
+	doneOnce sync.Once
 }
+
+// closeDone releases waiters; a re-queued run can be finished twice (stop during shutdown).
+func (r *run) closeDone() { r.doneOnce.Do(func() { close(r.done) }) }
 
 // Manager queues and executes runs, persisting each under dataDir/runs/<id>.
 type Manager struct {
@@ -89,8 +97,11 @@ type Manager struct {
 	OnFinish func(RunMeta)
 	// SecretEnv turns RunSpec.Secrets into environment entries for that child only.
 	SecretEnv func(names []string) []string
-	closed    bool
-	wg        sync.WaitGroup
+	// RebuildArgv recomputes an agent's command from the current settings when a run queued by
+	// an earlier studio process starts, so a changed permission mode or CLI path applies.
+	RebuildArgv func(spec RunSpec) ([]string, error)
+	closed      bool
+	wg          sync.WaitGroup
 }
 
 func newManager(dataDir string, limit func() (heavy, light int)) (*Manager, error) {
@@ -118,9 +129,15 @@ func (m *Manager) loadHistory() {
 			continue
 		}
 		if meta.Status == "running" { // the previous studio process died while this ran
-			if meta.Kind == "script" {
+			// children run in their own process group, so a crash can leave one alive; never run a
+			// second copy next to it
+			orphan := meta.PID > 0 && syscall.Kill(-meta.PID, 0) == nil
+			if meta.Kind == "script" && !orphan {
 				resetForRetry(&meta) // scripts are idempotent: run again
 			} else {
+				if orphan {
+					meta.Error = fmt.Sprintf("tiến trình cũ (PID %d) vẫn còn chạy; dừng nó rồi chạy lại", meta.PID)
+				}
 				meta.Status = "interrupted"
 				if meta.Ended.IsZero() {
 					meta.Ended = time.Now()
@@ -129,7 +146,7 @@ func (m *Manager) loadHistory() {
 			_ = writeJSONAtomic(filepath.Join(m.dir, meta.ID, "meta.json"), meta, 0o644)
 		}
 		if meta.Status == "queued" { // still waiting: keep it in the queue
-			m.runs[meta.ID] = &run{meta: meta, subs: map[chan Event]struct{}{}, done: make(chan struct{})}
+			m.runs[meta.ID] = &run{meta: meta, subs: map[chan Event]struct{}{}, done: make(chan struct{}), resumed: true}
 			m.order = append(m.order, meta.ID)
 			continue
 		}
@@ -346,11 +363,21 @@ func (m *Manager) closeRun(r *run) {
 	}
 	r.subs = map[chan Event]struct{}{}
 	r.mu.Unlock()
-	close(r.done)
+	r.closeDone()
 }
 
 func (m *Manager) execute(r *run) {
-	defer close(r.done)
+	defer r.closeDone()
+	if r.resumed && r.meta.Kind == "agent" && m.RebuildArgv != nil {
+		argv, err := m.RebuildArgv(r.meta.RunSpec)
+		if err != nil {
+			m.finish(r, -1, err)
+			return
+		}
+		r.mu.Lock()
+		r.meta.Argv = argv
+		r.mu.Unlock()
+	}
 	spec := r.meta.RunSpec
 	if spec.FingerprintDir != "" { // fingerprint the inputs this run actually starts from
 		h := videoInputsHash(spec.FingerprintDir)
@@ -400,6 +427,10 @@ func (m *Manager) execute(r *run) {
 	limit := runTimeout(spec)
 	timer := time.AfterFunc(limit, func() {
 		r.mu.Lock()
+		if r.exited {
+			r.mu.Unlock()
+			return
+		}
 		r.timedOut, r.stopped = true, true
 		r.mu.Unlock()
 		r.emit(m.dir, Event{Kind: "status", Title: "Quá giới hạn thời gian, đang dừng", Body: limit.String(), Error: true})
@@ -447,6 +478,10 @@ func (m *Manager) execute(r *run) {
 		_, _ = io.Copy(io.Discard, errR)
 	}()
 	err := cmd.Wait()
+	timer.Stop()
+	r.mu.Lock()
+	r.exited = true
+	r.mu.Unlock()
 	outW.Close()
 	errW.Close()
 	wg.Wait()
@@ -480,12 +515,15 @@ func (m *Manager) finish(r *run, code int, err error) {
 	r.mu.Lock()
 	r.meta.Ended = time.Now()
 	r.meta.ExitCode = &code
+	if r.timedOut && code == 0 { // it finished just as the limit hit
+		r.stopped = false
+	}
 	switch {
-	case r.requeue:
+	case r.requeue && code != 0: // a script that finished cleanly during shutdown is done
 		resetForRetry(&r.meta)
 	case r.interrupted:
 		r.meta.Status = "interrupted"
-	case r.timedOut:
+	case r.timedOut && code != 0:
 		r.meta.Status = "failed"
 		r.meta.Error = fmt.Sprintf("quá giới hạn %s", runTimeout(r.meta.RunSpec))
 	case r.stopped:
@@ -805,10 +843,12 @@ func runTimeout(spec RunSpec) time.Duration {
 		return time.Duration(spec.TimeoutSec) * time.Second
 	}
 	switch {
-	case spec.Kind == "agent":
+	case spec.Kind == "agent", spec.Step == "render":
 		return 90 * time.Minute
-	case spec.Step == "render":
+	case spec.Step == "align": // the first align also installs PyTorch and downloads models
 		return 90 * time.Minute
+	case spec.Step == "scenes": // image runs retry each scene with backoff
+		return 60 * time.Minute
 	case spec.Heavy:
 		return 45 * time.Minute
 	default:

@@ -913,7 +913,7 @@ func (a *App) putSecret(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	v := strings.TrimSpace(req.Value)
-	if len(v) < 8 || len(v) > 512 || strings.ContainsAny(v, " \t\r\n") {
+	if !plausibleKey(v) {
 		failFor(w, errors.New("khoá trông không đúng: dán đúng một dòng khoá"))
 		return
 	}
@@ -959,6 +959,10 @@ func (a *App) importLegacySecret(w http.ResponseWriter, r *http.Request) {
 		failFor(w, os.ErrNotExist)
 		return
 	}
+	if !plausibleKey(v) {
+		failFor(w, errors.New("khoá trong file cũ không hợp lệ"))
+		return
+	}
 	if err := a.secrets.Set("image.hub", v); err != nil {
 		failFor(w, err)
 		return
@@ -973,10 +977,27 @@ func (a *App) patchMeta(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	slug := r.PathValue("slug")
+	if a.runs.Busy(slug) { // trim-intro and the scene agent rewrite project.json too
+		fail(w, http.StatusConflict, errors.New("bài đang có việc chạy; đổi thể loại hoặc kiểu video sau khi xong"))
+		return
+	}
 	if err := a.projects.SetMeta(slug, m); err != nil {
 		failFor(w, err)
 		return
 	}
 	d, _ := a.detail(slug)
 	writeJSON(w, 200, d)
+}
+
+// plausibleKey: API keys are one line of printable ASCII; pasted spaces or invisible characters are refused.
+func plausibleKey(v string) bool {
+	if len(v) < 8 || len(v) > 512 {
+		return false
+	}
+	for i := 0; i < len(v); i++ {
+		if v[i] < 0x21 || v[i] > 0x7e {
+			return false
+		}
+	}
+	return true
 }

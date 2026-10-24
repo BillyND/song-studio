@@ -3,6 +3,8 @@ package main
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
+	"os"
 	"path/filepath"
 )
 
@@ -86,7 +88,10 @@ var genres = []Genre{
 var languages = []struct {
 	ID    string `json:"id"`
 	Label string `json:"label"`
-}{{"vi", "Tiếng Việt"}, {"en", "Tiếng Anh"}, {"zh", "Tiếng Trung"}, {"ja", "Tiếng Nhật"}, {"ko", "Tiếng Hàn"}, {"es", "Tiếng Tây Ban Nha"}, {"fr", "Tiếng Pháp"}}
+}{{"vi", "Tiếng Việt"}, {"en", "Tiếng Anh"}, {"es", "Tiếng Tây Ban Nha"}, {"fr", "Tiếng Pháp"}}
+
+// Chinese, Japanese and Korean are left out until the video has CJK fonts and per-character
+// wipe tokens: the karaoke fonts have no CJK glyphs and lyrics split on spaces.
 
 var themeKaraoke = map[string]string{"truyen-thong": "pink", "hien-dai": "blue", "co-dien": "gold"}
 
@@ -122,20 +127,27 @@ func (p Projects) SetMeta(slug string, m SongMeta) error {
 	if err != nil {
 		return err
 	}
-	_, raw := readConfig(dir)
+	// never rebuild project.json from nothing: an empty read means another writer is mid-write
+	raw, err := os.ReadFile(filepath.Join(dir, "project.json"))
 	cfg := map[string]any{}
-	if len(raw) > 0 {
-		if err := json.Unmarshal(raw, &cfg); err != nil {
-			return err
-		}
+	if err != nil || len(raw) == 0 || json.Unmarshal(raw, &cfg) != nil || len(cfg) == 0 {
+		return fmt.Errorf("%w: project.json đang trống hoặc đang được ghi, thử lại sau", errConflict)
 	}
 	if m.Genre != nil {
 		g := findGenre(*m.Genre)
 		if g == nil && *m.Genre != "" {
 			return errors.New("thể loại không hợp lệ")
 		}
+		// follow the new genre's look only while the song still has the old genre's default,
+		// so a theme the user picked in Xem trước is kept
+		old, _ := cfg["genre"].(string)
+		cur, _ := cfg["video_theme"].(string)
+		oldDefault := "truyen-thong"
+		if og := findGenre(old); og != nil {
+			oldDefault = og.Theme
+		}
 		cfg["genre"] = *m.Genre
-		if g != nil && m.Theme == nil {
+		if g != nil && m.Theme == nil && (cur == "" || cur == oldDefault) {
 			cfg["video_theme"], cfg["karaoke_color"] = g.Theme, themeKaraoke[g.Theme]
 		}
 	}

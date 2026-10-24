@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -674,7 +675,9 @@ func moveToTrash(home, src string) (string, error) {
 		const script = `on run argv
 tell application "Finder" to delete (POSIX file (item 1 of argv) as alias)
 end run`
-		if out, ferr := exec.Command("osascript", "-e", script, src).CombinedOutput(); ferr != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second) // first use asks for Automation permission
+		defer cancel()
+		if out, ferr := exec.CommandContext(ctx, "osascript", "-e", script, src).CombinedOutput(); ferr != nil {
 			return "", fmt.Errorf("không chuyển được vào Thùng rác: %s", strings.TrimSpace(string(out)))
 		}
 		return "Thùng rác của ổ chứa bài", nil

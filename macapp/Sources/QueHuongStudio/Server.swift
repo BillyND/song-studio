@@ -42,8 +42,10 @@ final class ServerProcess {
     }
 
     /// SIGTERM, then SIGKILL if the server has not exited in time.
+    /// `done` always runs later on the main queue, never inside the caller (applicationShouldTerminate
+    /// must return .terminateLater before it may reply).
     func stop(timeout: TimeInterval = 12, done: @escaping () -> Void) {
-        guard let p = proc, p.isRunning else { done(); return }
+        guard let p = proc, p.isRunning else { DispatchQueue.main.async(execute: done); return }
         p.terminate()
         DispatchQueue.global().async {
             let deadline = Date().addingTimeInterval(timeout)

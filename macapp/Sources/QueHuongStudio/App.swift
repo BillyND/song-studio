@@ -11,6 +11,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate {
     private let browser = BrowserDelegate()
     private var updater: SPUStandardUpdaterController!
     private var quitting = false
+    private var terminating = false
     private var updating = false
 
     func applicationDidFinishLaunching(_ note: Notification) {
@@ -93,7 +94,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate {
     func applicationShouldTerminateAfterLastWindowClosed(_ app: NSApplication) -> Bool { true }
 
     func applicationShouldTerminate(_ app: NSApplication) -> NSApplication.TerminateReply {
-        if quitting && !server.isRunning { return .terminateNow }
+        if terminating { return .terminateLater } // a reply is already on its way
+        if !server.isRunning {
+            quitting = true
+            return .terminateNow
+        }
         if !updating && !quitting {
             let n = Studio.activeRuns()
             if n > 0 {
@@ -106,7 +111,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate {
             }
         }
         quitting = true
-        server.stop { NSApp.reply(toApplicationShouldTerminate: true) }
+        terminating = true
+        server.stop {
+            NSApp.reply(toApplicationShouldTerminate: true)
+            // the server is down by now; if AppKit still holds the quit (seen during a Sparkle
+            // install), leave anyway so the update can proceed instead of hanging forever
+            DispatchQueue.main.asyncAfter(deadline: .now() + 3) { exit(0) }
+        }
         return .terminateLater
     }
 

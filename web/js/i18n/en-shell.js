@@ -192,7 +192,6 @@ export default {
   "Đã chép vào clipboard": "Copied to clipboard",
   "Không chép được, hãy chọn và chép tay": "Could not copy; select and copy it manually",
   // agent chat
-  "Chat agent": "Agent chat",
   "Chat với agent (⌘J)": "Chat with the agent (⌘J)",
   "Mọi bài hát": "All songs",
   "Agent làm việc trong thư mục này": "The agent works in this folder",

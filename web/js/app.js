@@ -20,7 +20,6 @@ function Sidebar({ route }) {
   const system = useStore((s) => s.system);
   const boot = useStore((s) => s.boot);
   const section = route[0] || "";
-  const chatOn = useStore((s) => s.chatOpen && !s.consoleRun);
   const nav = [
     { href: "#/", icon: "music", label: t("Bài hát"), on: section === "" || section === "p" },
     { href: "#/runs", icon: "terminal", label: t("Lượt chạy"), on: section === "runs", badge: system && (system.running + system.queued) || 0 },
@@ -35,8 +34,6 @@ function Sidebar({ route }) {
       <div class="brand-text"><div class="brand-name">Song Studio</div><div class="brand-sub">${t("Lời → Suno → Video")}</div></div></div>
     ${nav.map((n) => html`<a class=${"nav-item" + (n.on ? " active" : "")} href=${n.href} title=${n.label}><${Icon} name=${n.icon} size=${17} /><span class="nav-label">${n.label}</span>
       ${n.badge ? html`<span class="nav-badge">${n.badge}</span>` : null}</a>`)}
-    <button type="button" class=${"nav-item nav-chat" + (chatOn ? " active" : "")} title=${t("Chat với agent (⌘J)")} onClick=${toggleChat}>
-      <${Icon} name="bot" size=${17} /><span class="nav-label">${t("Chat agent")}</span><kbd class="nav-kbd">⌘J</kbd></button>
     <div class="sidebar-foot">
       <div class="meter" title=${t("Tải trung bình 1 phút so với số nhân CPU")}>
         <div class="meter-row"><span>${t("Tải máy")}</span><b>${load.toFixed(1)} / ${cpus}</b></div>
@@ -50,6 +47,15 @@ function Sidebar({ route }) {
       </div>
     </div>
   </nav>`;
+}
+
+// The agent chat lives in a floating bubble, apart from the page navigation; it hides while the
+// chat panel is open.
+function ChatBubble() {
+  const shown = useStore((s) => s.chatOpen && !s.consoleRun);
+  if (shown) return null;
+  return html`<button type="button" class="chat-bubble" title=${t("Chat với agent (⌘J)")} aria-label=${t("Chat với agent (⌘J)")} onClick=${toggleChat}>
+    <${Icon} name="bot" size=${22} /></button>`;
 }
 
 function ThemeToggle() {
@@ -108,6 +114,7 @@ function App() {
     <${Sidebar} route=${route} />
     <main class="main">${boot && !boot.skillExists ? html`<div class="page"><div class="warn-box">${t("Không thấy skill ở {path}. Sửa đường dẫn trong Cài đặt.", { path: boot.config.skillDir })}</div></div>` : null}<${Boundary} resetKey=${route.join("/")}>${page}</${Boundary}></main>
     ${consoleRun ? html`<${Drawer} />` : chatOpen ? html`<${ChatPanel} />` : null}
+    <${ChatBubble} />
     <${Toasts} />
     <${UpdateBanner} />
   </div>`;

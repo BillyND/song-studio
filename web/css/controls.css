@@ -23,11 +23,13 @@ label.field { display: flex; flex-direction: column; gap: 5px; font-size: 12.5px
 .form-row { display: flex; gap: 14px; flex-wrap: wrap; }
 .form-row > * { flex: 1 1 220px; min-width: 0; }
 
-.seg { display: inline-flex; padding: 2px; border-radius: var(--r); background: var(--surface-2); border: 1px solid var(--border); gap: 2px; }
+/* hugs its options even inside a column layout (label.field stretches children otherwise) */
+.seg { display: inline-flex; align-self: flex-start; max-width: 100%; overflow-x: auto; padding: 2px; border-radius: var(--r); background: var(--surface-2); border: 1px solid var(--border); gap: 2px; }
+.seg button { flex: none; }
 .seg button { border: none; background: transparent; height: 28px; padding: 0 10px; border-radius: var(--r-sm); cursor: pointer; font-size: 12.5px; font-weight: 500; color: var(--text-2); display: inline-flex; gap: 6px; align-items: center; }
 .seg button:hover { color: var(--text); }
 .seg button.on { background: var(--surface); color: var(--text); box-shadow: 0 0 0 1px var(--border-strong); }
-.switch { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; font-size: 13px; color: var(--text-2); user-select: none; }
+.switch { display: inline-flex; align-self: flex-start; align-items: center; gap: 8px; cursor: pointer; font-size: 13px; color: var(--text-2); user-select: none; }
 .switch i { width: 32px; height: 18px; border-radius: 18px; background: var(--surface-3); position: relative; transition: background 0.15s; }
 .switch i::after { content: ""; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%; background: #fff; transition: transform 0.15s; }
 .switch.on i { background: var(--accent); }
@@ -46,7 +48,7 @@ label.field { display: flex; flex-direction: column; gap: 5px; font-size: 12.5px
 .preset:hover { border-color: var(--border-strong); color: var(--text); }
 .preset.on { border-color: transparent; background: var(--accent-soft); color: var(--accent-text); }
 
-.agent-pick { display: inline-flex; gap: 8px; align-items: center; }
+.agent-pick { display: inline-flex; align-self: flex-start; max-width: 100%; gap: 8px; align-items: center; }
 .agent-ico { width: 20px; height: 20px; border-radius: 5px; display: inline-grid; place-items: center; font-size: 10.5px; font-weight: 700; color: #fff; flex: none; }
 .agent-ico.claude { background: #c15f3c; }
 .agent-ico.omp { background: #5b50e0; }

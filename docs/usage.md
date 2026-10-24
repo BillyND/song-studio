@@ -42,6 +42,12 @@ relaunching it waits until no job is queued or running. Each release also carrie
 the skill; on start the server installs it into `~/.claude/skills/suno-que-huong` when it is new,
 backing up local edits to `~/.local/share/que-huong-studio/skill-backups/` first.
 
+The app was called Quê Hương Studio until 1.0.12. Sparkle updates in place, so an old copy keeps
+its file name until its first start on 1.0.13 or later, when it renames itself to
+`Song Studio.app` and reopens. Internal names (bundle id `local.que-huong-studio`, the update
+feed, `~/.config/que-huong-studio`, `~/.local/share/que-huong-studio`, keychain service
+`que-huong-studio`, the skill) are unchanged, so songs, settings and keys carry over.
+
 Publishing a version (only from the Mac that holds the two keys below):
 
 ```bash

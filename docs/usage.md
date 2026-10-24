@@ -131,6 +131,23 @@ own page:
   (the page compares its UI build hash with the server's).
 - Progress bars from tools such as Demucs are filtered out of the run log.
 
+## Verified end to end (2026-10-24)
+
+Run on the installed app against a real song ("Ninh Bình – Đẹp Tựa Vần Thơ"):
+
+- **Tạo prompt Suno** chain with two reference songs and a brief (Claude Haiku): analysis and
+  lyric review in parallel, then arrangement; about 1.5 minutes.
+- **Agent điền form Suno** (omp): filled suno.com/create through CUA in about 4 minutes, values
+  verified, Create left for the user.
+- **Làm video tự động** clicked in the UI: align → trim → scenes agent → images → stills → render
+  produced a 1080p video in about 12 minutes; re-run on the final build skipped finished steps
+  (images → stills → render) and a second click was refused while the chain ran.
+- Every page of two songs (20 views) loads without JavaScript errors; no horizontal overflow at
+  390 px and 768 px (mobile emulation); dark and light themes checked; `go test -race` passes.
+
+Not covered: a physical phone (only emulation) and Suno's own generation (pressing Create is
+left to the user by design).
+
 ## Troubleshooting
 
 - **A CLI shows "không thấy"** in the sidebar: set its path in Cài đặt, or re-run `make install`

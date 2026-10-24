@@ -2,13 +2,13 @@
 import { html, render, useEffect, useErrorBoundary, api, store, useStore, useRoute, theme, toastError, t, openChat, closeChat, localStorageGet } from "./core.js";
 import { Icon } from "./icons.js";
 import { Toasts, Btn } from "./ui.js";
-import { Drawer } from "./console.js";
-import { ChatPanel } from "./chat.js";
-import { ProjectsPage } from "./projects.js";
-import { ProjectPage } from "./project.js";
+import { Drawer } from "./console/run-view.js";
+import { ChatPanel } from "./chat/panel.js";
+import { ProjectsPage } from "./projects/list.js";
+import { ProjectPage } from "./project/page.js";
 import { RunsPage, RunPage } from "./runs.js";
 import { SkillPage } from "./skill.js";
-import { SettingsPage } from "./settings.js";
+import { SettingsPage } from "./settings/page.js";
 
 theme.set(new URLSearchParams(location.search).get("theme") || theme.get());
 const drawerW = localStorageGet("drawerW");

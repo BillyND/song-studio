@@ -224,6 +224,7 @@ export default {
   "Model theo bước: bước nhẹ chạy model nhanh, rẻ hơn (ví dụ sonnet). Để trống là dùng model mặc định. Model bạn chọn lúc giao việc luôn được ưu tiên.": "Models per step: lighter steps can run a faster, cheaper model (for example sonnet). Empty means the default model. A model you pick when handing over a task always wins.",
   "Chưa gửi được: {error}. Gửi thêm một tin để thử lại, hoặc bỏ các tin này.": "Not sent: {error}. Send another message to try again, or remove these.",
   "{n} thao tác": "{n} actions",
+  "1 thao tác": "1 action",
   "Xoá cuộc trò chuyện": "Delete chat",
   "Mở chat": "Open chat",
   "Nói tiếp với agent trong phiên này": "Keep talking to the agent in this session",

@@ -167,7 +167,7 @@ export default {
   "Canh lời → agent lên cảnh → tạo ảnh còn thiếu → khung xem trước → xuất video, kèm bản nhạc. Canh lời và lên cảnh được bỏ qua khi đã làm và vẫn còn đúng": "Align lyrics → agent plans scenes → make missing images → preview frames → export video, plus sheet music. Alignment and scene planning are skipped when done and still current",
   "Chạy cả chuỗi": "Run the whole chain",
   "Chỉ xuất video": "Export video only",
-  "1920×1080, 30 fps, H.264 + AAC. Khoảng 8–9 phút cho bài 4 phút": "1920×1080, 30 fps, H.264 + AAC. About 8–9 minutes for a 4-minute song",
+  "1920×1080, 30 fps, H.264 + AAC. Dựng trên nhiều nhân CPU cùng lúc, khoảng 1–2 phút cho bài 4 phút": "1920×1080, 30 fps, H.264 + AAC. Drawn on several CPU cores at once, about 1–2 minutes for a 4-minute song",
   "Xuất video": "Export video",
   "Lượt chạy của bước này": "Runs for this step",
   "Giao việc cho agent": "Ask an agent",

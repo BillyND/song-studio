@@ -1,0 +1,28 @@
+/* Skill editor (file tree, code area, side column) and Settings extras. */
+.ide { display: grid; grid-template-columns: 240px 1fr 320px; gap: 14px; height: calc(100vh - 140px); }
+.ide > * { min-width: 0; }
+.tree { overflow: auto; padding: 6px; }
+.tree-dir { font-size: 12px; color: var(--muted); padding: 10px 8px 4px; font-weight: 500; }
+.tree-file { display: flex; align-items: center; gap: 8px; height: 30px; padding: 0 8px; border-radius: var(--r-sm); cursor: pointer; font-size: 13px; color: var(--text-2); }
+.tree-file:hover { background: var(--surface-2); color: var(--text); }
+.tree-file.on { background: var(--surface-3); color: var(--text); }
+.tree-file.dis { opacity: 0.45; cursor: default; }
+.editor { display: flex; flex-direction: column; overflow: hidden; }
+.editor-head { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-bottom: 1px solid var(--border); font-family: var(--mono); font-size: 12.5px; }
+.code { flex: 1; display: grid; grid-template-columns: auto 1fr; overflow: hidden; }
+.gutter { padding: 12px 8px 12px 12px; text-align: right; color: var(--muted); font: 12.5px/1.65 var(--mono); user-select: none; overflow: hidden; }
+.code textarea { border: none; outline: none; resize: none; background: transparent; padding: 12px 14px; font: 12.5px/1.65 var(--mono); white-space: pre; overflow: auto; tab-size: 2; }
+.side { display: flex; flex-direction: column; gap: 14px; overflow: auto; }
+.step-models { flex-basis: 100%; display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; padding-left: 102px; }
+
+@media (max-width: 1240px) {
+  .ide { grid-template-columns: 220px 1fr; height: auto; }
+  .ide .editor { height: 70vh; }
+  .ide .side { grid-column: 1 / -1; display: grid; grid-template-columns: 1fr 1fr; align-items: start; }
+}
+@media (max-width: 980px) { .ide .side { grid-template-columns: 1fr; } }
+@media (max-width: 720px) {
+  .ide { grid-template-columns: 1fr; }
+  .ide .tree { max-height: 220px; }
+  .step-models { padding-left: 0; }
+}

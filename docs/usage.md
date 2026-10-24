@@ -316,3 +316,13 @@ Go stdlib server (`main.go`, `server.go`, `runs.go`, `parsers.go`, `projects.go`
 `config.go`) with the web UI embedded from `web/`
 (Preact 10.29.8 + htm 3.1.1 as local ES modules, no build step). Parser tests replay recorded
 CLI output from `testdata/`.
+
+The web UI is split into small modules (most under 120 lines):
+
+- `web/js/core.js` holds the API client, store and routing; `core/format.js` and `core/prefs.js` add formatting, theme and per-browser preferences.
+- `ui.js` re-exports `ui/*` (controls, agents, overlays, content, pickers).
+- `console/` holds the run stream, the timeline events and the run view.
+- `chat/` holds the agent chat panel, one file per part.
+- `project/` holds the song workspace, one file per step, plus shared `actions.js` and `parts.js`.
+
+Styles live in `web/css/` in the same spirit. `tokens.css` is the only place colours, radii and shadows are defined (dark and light). The other files cover base, shell, controls, surfaces, project, console, chat and skill. The look is flat: neutral surfaces, one solid accent and borders instead of shadows. Each screen has one primary button.

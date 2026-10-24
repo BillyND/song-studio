@@ -528,7 +528,7 @@ func TestRoutesRegisterAndServe(t *testing.T) {
 	defer m.Shutdown(time.Second)
 	app := &App{cfg: cs, runs: m, projects: Projects{cfg: cs}, token: "tok", home: home, version: "t", build: "b", started: time.Now()}
 	h := app.routes()
-	for _, path := range []string{"/", "/api/health", "/api/projects", "/api/runs", "/api/groups/none", "/api/skill/profiles", "/css/app.css", "/js/app.js"} {
+	for _, path := range []string{"/", "/api/health", "/api/projects", "/api/runs", "/api/groups/none", "/api/skill/profiles", "/css/tokens.css", "/js/app.js"} {
 		r := httptest.NewRequest("GET", path, nil)
 		r.Host = "127.0.0.1:4317"
 		w := httptest.NewRecorder()

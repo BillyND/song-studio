@@ -1,0 +1,64 @@
+/* Design tokens: neutral surfaces, one solid accent, small radii, no decorative shadows.
+   Dark is the default theme; text on every surface keeps at least 4.5:1 contrast. */
+:root {
+  --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", "Segoe UI", system-ui, sans-serif;
+  --mono: "SF Mono", "JetBrains Mono", ui-monospace, Menlo, monospace;
+  --bg: #0f0f11;
+  --bg-2: #141416;
+  --surface: #18181b;
+  --surface-2: #1f1f23;
+  --surface-3: #2a2a2f;
+  --solid: #1c1c1f;
+  --border: #27272a;
+  --border-strong: #3a3a40;
+  --text: #f4f4f5;
+  --text-2: #b4b4bb;
+  --muted: #8b8b94;
+  --accent: #db2777;
+  --accent-hover: #c0216a;
+  --accent-text: #f472b6;
+  --accent-soft: rgba(219, 39, 119, 0.14);
+  --on-accent: #ffffff;
+  --ok: #4ade80;
+  --ok-soft: rgba(74, 222, 128, 0.12);
+  --run: #60a5fa;
+  --run-soft: rgba(96, 165, 250, 0.12);
+  --warn: #fbbf24;
+  --warn-soft: rgba(251, 191, 36, 0.12);
+  --bad: #f87171;
+  --bad-soft: rgba(248, 113, 113, 0.12);
+  --code-bg: #0b0b0d;
+  --shadow-pop: 0 10px 30px rgba(0, 0, 0, 0.45);
+  --r-sm: 6px;
+  --r: 8px;
+  --r-lg: 10px;
+  --sidebar: 232px;
+  --drawer: min(560px, 46vw);
+  color-scheme: dark;
+}
+:root[data-theme="light"] {
+  --bg: #fafafa;
+  --bg-2: #f4f4f5;
+  --surface: #ffffff;
+  --surface-2: #f4f4f5;
+  --surface-3: #e4e4e7;
+  --solid: #ffffff;
+  --border: #e4e4e7;
+  --border-strong: #d4d4d8;
+  --text: #18181b;
+  --text-2: #52525b;
+  --muted: #6b6b74;
+  --accent-text: #be185d;
+  --accent-soft: rgba(219, 39, 119, 0.08);
+  --ok: #15803d;
+  --ok-soft: rgba(21, 128, 61, 0.09);
+  --run: #1d4ed8;
+  --run-soft: rgba(29, 78, 216, 0.08);
+  --warn: #b45309;
+  --warn-soft: rgba(180, 83, 9, 0.09);
+  --bad: #dc2626;
+  --bad-soft: rgba(220, 38, 38, 0.08);
+  --code-bg: #f4f4f5;
+  --shadow-pop: 0 10px 30px rgba(24, 24, 27, 0.14);
+  color-scheme: light;
+}

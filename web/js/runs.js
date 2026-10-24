@@ -2,7 +2,7 @@
 import { html, useState, useEffect, api, openRun, go, ago, useStore, runDuration, t } from "./core.js";
 import { Icon } from "./icons.js";
 import { Seg, StatusPill, AgentIcon, Empty, Btn } from "./ui.js";
-import { RunView } from "./console.js";
+import { RunView } from "./console/run-view.js";
 
 export function RunsPage() {
   const [runs, setRuns] = useState(null);

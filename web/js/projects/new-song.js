@@ -1,48 +1,10 @@
-// Song list and the "new song" dialog.
-import { html, useState, useEffect, api, toast, toastError, go, ago, bytes, media, useStore, openRun, bumpRuns, t } from "./core.js";
-import { Icon } from "./icons.js";
-import { Btn, Modal, Field, Empty, PresetChips, Switch, GenrePicker } from "./ui.js";
+// New song: title, lyrics, genre and optional reference songs.
+import { ago, api, bumpRuns, bytes, go, html, isVideo, openRun, t, toast, toastError, useEffect, useState, useStore } from "../core.js";
+import { Icon } from "../icons.js";
+import { Btn, Field, GenrePicker, Modal, PresetChips, Switch } from "../ui.js";
 
-export function ProjectsPage() {
-  const [list, setList] = useState(null);
-  const [creating, setCreating] = useState(false);
-  const runsVersion = useStore((s) => s.runsVersion);
-  useEffect(() => { api("/api/projects").then(setList).catch(toastError); }, [runsVersion]);
-  return html`<div class="page">
-    <div class="page-head">
-      <div><div class="eyebrow">Song Studio</div><h1>${t("Bài hát")}</h1>
-        <div class="muted" style="margin-top:6px">${t("Mỗi bài, thuộc thể loại nào cũng vậy, đi qua 8 bước: từ lời tới bài hát, video karaoke và bản nhạc. Bấm vào một bài để làm tiếp.")}</div></div>
-      <${Btn} kind="primary" icon="plus" onClick=${() => setCreating(true)}>${t("Bài mới")}</${Btn}>
-    </div>
-    ${list === null ? html`<div class="empty"><${Icon} name="loader" class="spin" size=${22} /></div>` : html`
-    <div class="grid-cards">
-      ${list.map((p) => html`<${SongCard} key=${p.slug} p=${p} />`)}
-      <div class="card song new-card" onClick=${() => setCreating(true)}><div style="text-align:center"><${Icon} name="plus" size=${26} /><div style="margin-top:8px;font-weight:600">${t("Tạo bài mới từ lời")}</div></div></div>
-    </div>`}
-    ${list && list.length === 0 && html`<${Empty} icon="lotus" title=${t("Chưa có bài nào")}>${t("Bấm \"Bài mới\" và dán lời bài hát để bắt đầu.")}</${Empty}>`}
-    ${creating && html`<${NewSong} onClose=${() => setCreating(false)} />`}
-  </div>`;
-}
 
-function SongCard({ p }) {
-  const pct = p.total ? Math.round((p.done / p.total) * 100) : 0;
-  const initials = (p.title || "?").split(/\s+/).map((w) => w[0]).join("").slice(0, 3).toUpperCase();
-  return html`<div class="card song" onClick=${() => go("/p/" + encodeURIComponent(p.slug))} role="link" tabindex="0" onKeyDown=${(e) => e.key === "Enter" && go("/p/" + p.slug)}>
-    <div class="song-cover">
-      ${p.cover ? html`<img loading="lazy" src=${media(p.slug, p.cover)} alt="" />` : html`<div class="ph">${initials}</div>`}
-      <div class="song-badge">${p.video ? html`<span class="pill ok"><${Icon} name="film" size=${11} /> ${t("Có video")}</span>` : html`<span class="pill">${t("{done}/{total} bước", { done: p.done, total: p.total })}</span>`}</div>
-    </div>
-    <div class="song-meta">
-      <div class="song-title">${p.title}</div>
-      <div class="muted small">${p.subtitle || "—"} · ${ago(p.updated)}</div>
-      <div class="progress"><i style=${{ width: pct + "%" }}></i></div>
-    </div>
-  </div>`;
-}
-
-const isVideo = (n) => /\.(mp4|webm|mov|mkv)$/i.test(n);
-
-function NewSong({ onClose }) {
+export function NewSong({ onClose }) {
   const boot = useStore((s) => s.boot);
   const defaults = boot?.config?.credits || [["Sáng tác: ", ""], ["Phổ nhạc: ", ""]];
   const [form, setForm] = useState({ title: "", subtitle: "", lyrics: "", brief: "", genre: "", language: "vi" });
@@ -115,7 +77,7 @@ function NewSong({ onClose }) {
       <div class=${"dropzone" + (over ? " over" : "")} style="padding:16px" onDragOver=${(e) => { e.preventDefault(); setOver(true); }} onDragLeave=${() => setOver(false)}
         onDrop=${(e) => { e.preventDefault(); setOver(false); addFiles(e.dataTransfer.files); }}>
         <${Icon} name="upload" size=${20} /><div style="margin:6px 0 2px;font-weight:600">${t("Kéo bài mẫu vào đây")}</div>
-        <div class="muted small">mp3, m4a, mp4, webm… ${t("hoặc")} <label style="color:var(--accent);cursor:pointer">${t("chọn file")}<input type="file" accept="audio/*,video/*" multiple hidden onChange=${(e) => addFiles(e.target.files)} /></label></div>
+        <div class="muted small">mp3, m4a, mp4, webm… ${t("hoặc")} <label style="color:var(--accent-text);cursor:pointer">${t("chọn file")}<input type="file" accept="audio/*,video/*" multiple hidden onChange=${(e) => addFiles(e.target.files)} /></label></div>
       </div>
       ${recent.length > 0 && html`<div class="file-list">${recent.slice(0, 5).map((f) => { const on = refs.some((r) => r.path === f.path); return html`
         <div class="file-item" style=${on ? { borderColor: "var(--accent)" } : {}} onClick=${() => (on ? setRefs(refs.filter((r) => r.path !== f.path)) : addPath(f))}>

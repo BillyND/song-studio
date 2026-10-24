@@ -4,6 +4,9 @@ import { useState, useEffect, useRef, useMemo, useCallback, useLayoutEffect, use
 import htm from "/lib/htm.mjs";
 import EN_SHELL from "./i18n/en-shell.js";
 import EN_PROJECT from "./i18n/en-project.js";
+import { localStorageGet, localStorageSet } from "./core/prefs.js";
+export * from "./core/format.js";
+export * from "./core/prefs.js";
 
 export const html = htm.bind(h);
 export { h, render, useState, useEffect, useRef, useMemo, useCallback, useLayoutEffect, useErrorBoundary };
@@ -85,6 +88,9 @@ export function toast(message, kind = "ok") {
 }
 export function toastError(err) { toast(err?.message || String(err), "bad"); }
 
+// isActive: a run (or a chat's latest turn) that is still queued or running.
+export const isActive = (status) => status === "queued" || status === "running";
+
 export function openRun(id) { store.set({ consoleRun: id }); }
 // openChat shows the chat panel on a conversation (or a new one when id is null). The panel and
 // the run console share the right column, so the console makes way.
@@ -122,61 +128,3 @@ export function useRoute() {
   return hash.replace(/^#/, "").split("/").filter(Boolean).map(decodeURIComponent);
 }
 export const go = (path) => { location.hash = path; };
-
-// ---------- formatting ----------
-export function ago(iso) {
-  if (!iso || iso.startsWith("0001")) return "";
-  const s = (Date.now() - new Date(iso).getTime()) / 1000;
-  if (s < 45) return t("vừa xong");
-  if (s < 3600) return t("{n} phút trước", { n: Math.round(s / 60) });
-  if (s < 86400) return t("{n} giờ trước", { n: Math.round(s / 3600) });
-  return t("{n} ngày trước", { n: Math.round(s / 86400) });
-}
-export function dur(ms) {
-  if (ms < 0 || !isFinite(ms)) return "";
-  const s = Math.round(ms / 1000);
-  if (s < 60) return `${s}s`;
-  const m = Math.floor(s / 60);
-  if (m < 60) return `${m}m ${String(s % 60).padStart(2, "0")}s`;
-  return `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, "0")}m`;
-}
-export function runDuration(r) {
-  const zero = (t) => !t || t.startsWith("0001");
-  if (zero(r.started)) return "";
-  const end = zero(r.ended) ? Date.now() : new Date(r.ended).getTime();
-  return dur(end - new Date(r.started).getTime());
-}
-export function secs(t) {
-  if (t == null || !isFinite(t)) return "";
-  const m = Math.floor(t / 60);
-  return `${m}:${(t - m * 60).toFixed(1).padStart(4, "0")}`;
-}
-export function bytes(n) {
-  if (n < 1024) return `${n} B`;
-  if (n < 1 << 20) return `${(n / 1024).toFixed(0)} KB`;
-  return `${(n / (1 << 20)).toFixed(1)} MB`;
-}
-export const media = (slug, rel, bust) => `/media/${encodeURIComponent(slug)}/${rel.split("/").map(encodeURIComponent).join("/")}${bust ? `?v=${bust}` : ""}`;
-
-export async function copyText(text) {
-  try { await navigator.clipboard.writeText(text); toast(t("Đã chép vào clipboard")); }
-  catch { toast(t("Không chép được, hãy chọn và chép tay"), "bad"); }
-}
-
-export const theme = {
-  get: () => localStorageGet("theme") || "dark",
-  // Switching themes restyles every element. Per-element colour transitions made that look like
-  // lag (each part faded at its own pace), so they are paused for the switch. No View Transition:
-  // in the app's WKWebView its callback did not run, so the theme never changed.
-  set(v) {
-    const root = document.documentElement;
-    if (store.get().theme !== v) store.set({ theme: v }); // the icon flips now, even while the page crossfades
-    if (root.dataset.theme === v) return;
-    root.classList.add("theme-switching");
-    root.dataset.theme = v;
-    localStorageSet("theme", v);
-    setTimeout(() => root.classList.remove("theme-switching"), 50);
-  },
-};
-export function localStorageGet(k) { try { return localStorage.getItem("qhs." + k); } catch { return null; } }
-export function localStorageSet(k, v) { try { localStorage.setItem("qhs." + k, v); } catch { /* private mode */ } }

@@ -3,7 +3,7 @@ import { html, useState, useEffect, useRef, api, toast, toastError, openRun, bum
 import { Icon } from "./icons.js";
 import { Btn, StatusPill, Seg, Switch, Modal, Lightbox, Markdown, Empty, AgentPicker, useAgentChoice, AgentIcon, Field, PresetChips, GenrePicker } from "./ui.js";
 
-const STEP_ICON = { lyrics: "type", suno: "sparkles", audio: "music", align: "mic", trim: "scissors", scenes: "image", stills: "eye", render: "film", sheet: "sheet" };
+const STEP_ICON = { lyrics: "type", suno: "sparkles", audio: "music", align: "mic", scenes: "image", stills: "eye", render: "film", sheet: "sheet" };
 
 export function ProjectPage({ slug, step }) {
   const [d, setD] = useState(null);
@@ -24,9 +24,11 @@ export function ProjectPage({ slug, step }) {
 
   if (err) return html`<div class="page"><${Empty} icon="alert" title=${t("Không mở được bài")}>${err.message}</${Empty}></div>`;
   if (!d) return html`<div class="page"><div class="empty"><${Icon} name="loader" class="spin" size=${22} /></div></div>`;
-  const current = step || (d.steps.find((s) => s.status === "todo" || s.status === "stale") || d.steps[d.steps.length - 1]).id;
+  // a step from an old link (for example the removed "trim" step) falls back to the next useful one
+  const known = step && d.steps.some((s) => s.id === step);
+  const current = known ? step : (d.steps.find((s) => s.status === "todo" || s.status === "stale") || d.steps[d.steps.length - 1]).id;
   const ctx = { d, slug, reload: load, stamp };
-  const S = { lyrics: LyricsStep, suno: SunoStep, audio: AudioStep, align: AlignStep, trim: TrimStep, scenes: ScenesStep, stills: StillsStep, render: RenderStep, sheet: SheetStep }[current] || LyricsStep;
+  const S = { lyrics: LyricsStep, suno: SunoStep, audio: AudioStep, align: AlignStep, scenes: ScenesStep, stills: StillsStep, render: RenderStep, sheet: SheetStep }[current] || LyricsStep;
   const stepMeta = d.steps.find((s) => s.id === current);
   return html`<div class="page">
     <div class="hero">
@@ -80,10 +82,10 @@ function PrimaryAction({ d, slug }) {
 
 // VideoCTA explains and starts the whole video chain in one click.
 function VideoCTA({ d, slug }) {
-  const left = ["align", "trim", "scenes", "stills", "render", "sheet"].filter((id) => !stepDone(d, id)).length;
+  const left = ["align", "scenes", "stills", "render", "sheet"].filter((id) => !stepDone(d, id)).length;
   return html`<div class="cta">
     <div><div class="row" style="gap:8px"><${Icon} name="film" /><b>${t("Làm video karaoke từ bài này")}</b></div>
-      <div class="muted small" style="margin-top:4px">${t("Studio tự canh lời theo giọng hát → cắt bớt nhạc dạo nếu dài → agent lên danh sách cảnh → tạo ảnh AI → render khung xem trước → xuất video 1080p, kèm bản nhạc có lời. Còn {n} bước, khoảng 15–25 phút; bạn có thể đóng trang, việc vẫn chạy.", { n: left })}</div></div>
+      <div class="muted small" style="margin-top:4px">${t("Studio tự canh lời theo giọng hát → agent lên danh sách cảnh → tạo ảnh AI → render khung xem trước → xuất video 1080p, kèm bản nhạc có lời. Còn {n} bước, khoảng 15–25 phút; bạn có thể đóng trang, việc vẫn chạy.", { n: left })}</div></div>
     <div class="cta-go"><${Btn} kind="primary" icon="zap" busy=${d.steps.some((s) => s.status === "running")} onClick=${async () => { if (await runPipeline(slug, "video")) goStep(slug, "render"); }}>${t("Làm video tự động")}</${Btn}></div>
   </div>`;
 }
@@ -351,8 +353,8 @@ function SunoStep({ d, slug, reload }) {
     <${ChainStatus} slug=${slug} steps=${["lyrics", "suno"]} title=${t("Chuỗi tạo prompt")} />
     ${empty ? html`<${Empty} icon="sparkles" title=${t("Chưa có prompt Suno")}>${t("Ở")} <a href=${`#/p/${slug}/lyrics`} style="color:var(--accent)">${t("bước 1")}</a>${t(", thêm lời (và bài mẫu, yêu cầu nếu có) rồi bấm")} <b>${t("Tạo prompt Suno")}</b>.</${Empty}>` : html`
       <dl class="kv"><dt>${t("Tên bài")}</dt><dd><b>${[cfg.title, cfg.subtitle].filter(Boolean).join(" ")}</b></dd><dt>${t("Giọng hát")}</dt><dd>${cfg.vocal || "—"}</dd></dl>
-      <${CopyBlock} title="Styles" text=${(d.sunoStyle || "").trim()} extra=${html`<span class=${"pill " + (n > 1000 ? "bad" : "ok")}>${n}/1000</span>`} saving=${busy} onSave=${(v) => save("suno/style.txt", v)} />
       <${CopyBlock} title="Lyrics" text=${(d.sunoLyrics || "").trim()} saving=${busy} onSave=${(v) => save("suno/lyrics.txt", v)} />
+      <${CopyBlock} title="Styles" text=${(d.sunoStyle || "").trim()} extra=${html`<span class=${"pill " + (n > 1000 ? "bad" : "ok")}>${n}/1000</span>`} saving=${busy} onSave=${(v) => save("suno/style.txt", v)} />
       ${d.notes && html`<details><summary class="section-title" style="cursor:pointer"><${Icon} name="file" /><h3>${t("Ghi chú soát lời")}</h3></summary><div class="bubble" style="margin-top:8px"><${Markdown} text=${d.notes} /></div></details>`}
       <${AgentAction} slug=${slug} action="suno.agent" title=${t("Điền form suno.com/create")} hint=${t("Agent dùng CUA điều khiển Chrome; không bấm Create, bạn tự xem và bấm")} />
       <div class="row wrap"><${Btn} icon="external" onClick=${() => window.open("https://suno.com/create", "_blank", "noopener")}>${t("Mở Suno")}</${Btn}>
@@ -405,21 +407,6 @@ function AlignStep({ d, slug }) {
       ${d.timings.map((l, i) => html`<tr><td class="num">${i + 1}</td><td class="num">${secs(l.start)}</td><td class="num">${secs(l.end)}</td>
         <td class="num">${Math.abs(l.drift) > 1 ? html`<span class="pill warn">${l.drift.toFixed(2)}s</span>` : l.drift.toFixed(2) + "s"}${l.source === "even" ? html` <span class="pill warn">${t("chia đều")}</span>` : ""}</td><td>${l.text}</td></tr>`)}
     </tbody></table></div>`}
-  </div>`;
-}
-
-function TrimStep({ d, slug, stamp }) {
-  const [at, setAt] = useState(11.5);
-  const cfg = safeJSON(d.config);
-  const first = d.timings[0]?.start;
-  return html`<div class="stack">
-    <dl class="kv"><dt>${t("Giọng vào ở")}</dt><dd><b>${first != null ? secs(first) : "—"}</b> ${first > 15 ? html`<span class="pill warn">${t("dài hơn bài mẫu (~11s)")}</span>` : first != null ? html`<span class="pill ok">${t("ổn")}</span>` : ""}</dd>
-      ${cfg.intro_cut && html`<dt>${t("Đã cắt")}</dt><dd class="mono">${secs(cfg.intro_cut[0])} → ${secs(cfg.intro_cut[1])}</dd>`}</dl>
-    ${!cfg.intro_cut && html`<${ActionCard} title=${t("Cắt các câu nhạc dạo")} hint=${t("Bỏ trọn các câu 8 phách, chọn chỗ nối hợp âm giống nhau nhất, nối mềm 0,25s")} onRun=${() => runAction(slug, "trim", { vocalAt: Number(at) })} label=${t("Cắt intro")}>
-      <label class="row small muted">${t("Giọng vào ở")} <input class="input" type="number" step="0.5" min="5" max="30" style="width:84px" value=${at} onInput=${(e) => setAt(e.target.value)} /> ${t("giây")}</label>
-    </${ActionCard}>`}
-    ${cfg.intro_cut && html`<div class="muted small">${t("Để cắt lại, thêm lại file M4A gốc ở bước 3 (việc đó xoá mốc cắt cũ) rồi canh lời lại.")}</div>`}
-    ${d.audio && html`<audio controls preload="metadata" src=${media(slug, d.audio, stamp)}></audio>`}
   </div>`;
 }
 
@@ -550,9 +537,9 @@ function RenderStep({ d, slug, stamp, reload }) {
     ${video ? html`<video controls preload="metadata" src=${media(slug, video, stamp)}></video>
       <div class="row wrap"><b class="grow">${video}</b><${Btn} size="sm" icon="play" onClick=${() => open(false)}>${t("Mở bằng QuickTime")}</${Btn}><${Btn} size="sm" icon="folder" onClick=${() => open(true)}>${t("Hiện trong Finder")}</${Btn}><${Btn} size="sm" kind="danger" icon="trash" onClick=${trash}>${t("Xoá video")}</${Btn}></div>`
       : html`<${Empty} icon="film" title=${t("Chưa có video")}>${t("Xuất video sau khi đã xem trước khung hình.")}</${Empty}>`}
-    <${ChainStatus} slug=${slug} steps=${["align", "trim", "scenes", "stills", "render", "sheet"]} title=${t("Chuỗi video")} />
+    <${ChainStatus} slug=${slug} steps=${["align", "scenes", "stills", "render", "sheet"]} title=${t("Chuỗi video")} />
     ${!d.audio && html`<div class="warn-box">${t("Chưa có nhạc. Thêm file M4A từ Suno ở")} <a href=${`#/p/${slug}/audio`} style="color:inherit;text-decoration:underline">${t("bước 3")}</a> ${t("trước.")}</div>`}
-    <${ActionCard} agent title=${t("Làm video tự động")} hint=${t("Canh lời → cắt intro nếu cần → agent lên cảnh → tạo ảnh còn thiếu → khung xem trước → xuất video. Canh lời, cắt intro và lên cảnh được bỏ qua khi đã làm và vẫn còn đúng")} busy=${d.steps.some((s) => s.status === "running")} onRun=${() => runPipeline(slug, "video")} label=${t("Chạy cả chuỗi")} icon="zap" />
+    <${ActionCard} agent title=${t("Làm video tự động")} hint=${t("Canh lời → agent lên cảnh → tạo ảnh còn thiếu → khung xem trước → xuất video, kèm bản nhạc. Canh lời và lên cảnh được bỏ qua khi đã làm và vẫn còn đúng")} busy=${d.steps.some((s) => s.status === "running")} onRun=${() => runPipeline(slug, "video")} label=${t("Chạy cả chuỗi")} icon="zap" />
     <${ActionCard} title=${t("Chỉ xuất video")} hint=${t("1920×1080, 30 fps, H.264 + AAC. Khoảng 8–9 phút cho bài 4 phút")} onRun=${() => runAction(slug, "render")} label=${t("Xuất video")} icon="film" />
   </div>`;
 }

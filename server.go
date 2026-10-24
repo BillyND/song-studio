@@ -976,7 +976,7 @@ func (a *App) patchMeta(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	slug := r.PathValue("slug")
-	if a.runs.Busy(slug) { // trim-intro and the scene agent rewrite project.json too
+	if a.runs.Busy(slug) { // the scene agent rewrites project.json too
 		fail(w, http.StatusConflict, errors.New(tr("bài đang có việc chạy; đổi thể loại hoặc kiểu video sau khi xong", "the song has a run in progress; change the genre or video style after it finishes")))
 		return
 	}

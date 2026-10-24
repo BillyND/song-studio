@@ -1,6 +1,6 @@
 // English UI text: Vietnamese source string (as passed to t()) → English.
 export default {
-  // navigation and sidebar
+  "Bấm \"Bài mới\" và dán lời bài hát để bắt đầu.": "Click \"New song\" and paste the lyrics to start.",
   "Bài hát": "Songs",
   "Lượt chạy": "Runs",
   "Cài đặt": "Settings",
@@ -15,8 +15,6 @@ export default {
   "Trang này gặp lỗi: {error}.": "This page hit an error: {error}.",
   "Thử lại": "Try again",
   "Không thấy skill ở {path}. Sửa đường dẫn trong Cài đặt.": "Skill not found at {path}. Fix the path in Settings.",
-
-  // run console
   "đang chạy": "running",
   "lỗi": "error",
   "Kết quả · {n} dòng": "Output · {n} lines",
@@ -39,8 +37,6 @@ export default {
   "Đang chờ tới lượt, máy chỉ chạy số việc nặng đã đặt trong Cài đặt.": "Waiting its turn; the machine only runs as many heavy jobs as set in Settings.",
   "Đang khởi động…": "Starting…",
   "đang làm việc": "working",
-
-  // run history
   "Lịch sử": "History",
   "Mọi script và agent đã chạy, kể cả khi studio đã tắt rồi mở lại.": "Every script and agent that has run, even across studio restarts.",
   "Tất cả": "All",
@@ -54,8 +50,6 @@ export default {
   "Chi phí": "Cost",
   "Lúc": "When",
   "Quay lại": "Back",
-
-  // statuses
   "Đang chờ": "Queued",
   "Hoàn thành": "Succeeded",
   "Thất bại": "Failed",
@@ -65,8 +59,6 @@ export default {
   "Chưa làm": "To do",
   "Cần làm lại": "Needs redo",
   "Bỏ qua": "Skipped",
-
-  // shared pickers
   "{name} (thiếu)": "{name} (missing)",
   "model (mặc định)": "model (default)",
   "Thể loại": "Genre",
@@ -74,8 +66,6 @@ export default {
   "Chưa chọn": "Not set",
   "Ngôn ngữ hát": "Sung language",
   "Dùng khi canh lời theo giọng hát.": "Used when aligning lyrics to the vocals.",
-
-  // skill workspace
   "Bỏ thay đổi chưa lưu?": "Discard unsaved changes?",
   "Đã lưu {path}": "Saved {path}",
   "chưa lưu": "unsaved",
@@ -96,8 +86,6 @@ export default {
   "Agent làm việc ngay trong thư mục skill, theo luồng cập nhật của ak-skill-creator và chạy kiểm tra trước khi xong.": "The agent works directly in the skill folder, follows the ak-skill-creator update flow and runs the checks before finishing.",
   "Kiểm tra skill": "Validate skill",
   "Lần sửa gần đây": "Recent edits",
-
-  // settings
   "Đã lưu cài đặt": "Settings saved",
   "Agent mặc định": "Default agent",
   "Quyền của agent": "Agent permissions",
@@ -161,12 +149,9 @@ export default {
   "Xuất gói chẩn đoán": "Export diagnostics",
   "Đang kiểm tra…": "Checking…",
   "Gói chẩn đoán gồm kết quả kiểm tra, cài đặt, nhật ký studio và các lượt chạy gần đây; khoá API đã được che. Gửi kèm khi báo lỗi.": "The diagnostics bundle holds the check results, settings, studio log and recent runs, with API keys masked. Attach it when reporting a bug.",
-
-  // song list and new song dialog
-  "Mỗi bài, thuộc thể loại nào cũng vậy, đi qua 9 bước: từ lời tới bài hát, video karaoke và bản nhạc. Bấm vào một bài để làm tiếp.": "Every song, whatever its genre, goes through 9 steps: from lyrics to the song, a karaoke video and sheet music. Click a song to continue.",
+  "Mỗi bài, thuộc thể loại nào cũng vậy, đi qua 8 bước: từ lời tới bài hát, video karaoke và bản nhạc. Bấm vào một bài để làm tiếp.": "Every song, whatever its genre, goes through 8 steps: from lyrics to the song, a karaoke video and sheet music. Click a song to continue.",
   "Tạo bài mới từ lời": "Create a new song from lyrics",
   "Chưa có bài nào": "No songs yet",
-  "Bấm \"Bài mới\" và dán lời bài hát để bắt đầu.": "Click \"New song\" and paste the lyrics to start.",
   "Có video": "Has video",
   "{done}/{total} bước": "{done}/{total} steps",
   "Đang tạo bài…": "Creating song…",
@@ -200,8 +185,6 @@ export default {
   "Ví dụ lời dặn của người đặt bài. Agent dùng khi tạo kiểu phối riêng ở bước 0.": "For example, notes from whoever commissioned the song. The agent uses them when building a custom arrangement in step 0.",
   "Ví dụ: nhịp vừa, giọng nữ ấm, điệp khúc bùng nổ…": "E.g. medium tempo, warm female vocal, explosive chorus…",
   "Tạo prompt Suno ngay: agent {agent} soát lời song song với phân tích bài mẫu, rồi phối khí theo yêu cầu": "Create the Suno prompt now: agent {agent} proofreads the lyrics while the references are analysed, then arranges to your requests",
-
-  // relative times and clipboard
   "vừa xong": "just now",
   "{n} phút trước": "{n} min ago",
   "{n} giờ trước": "{n} h ago",

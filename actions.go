@@ -17,7 +17,6 @@ type ActionRequest struct {
 	Note    string    `json:"note"`    // extra instruction typed by the user
 	FixAll  bool      `json:"fixAll"`  // lyrics: apply structural proposals too
 	Profile string    `json:"profile"` // "" = choose from references and brief, else a skill profile id
-	VocalAt float64   `json:"vocalAt"` // trim target second
 	Times   []float64 `json:"times"`   // stills
 	Meter   string    `json:"meter"`   // sheet: 2/4, 3/4 or 4/4; "" = last run's
 	Key     string    `json:"key"`     // sheet: tonic to transpose to, "orig" = as sung; "" = last run's
@@ -46,7 +45,6 @@ func workflowActions() []Action {
 		{ID: "style.agent", Step: "suno", Label: tr("Phối khí & viết Styles", "Arrange & write Styles"), Kind: "agent", Hint: tr("Từ bài mẫu, yêu cầu và kiểu phối, viết Styles và thẻ đoạn", "Writes Styles and section tags from the references, brief and arrangement")},
 		{ID: "suno.agent", Step: "suno", Label: tr("Agent điền form Suno", "Agent fills the Suno form"), Kind: "agent", Hint: tr("Dùng CUA mở suno.com/create, không bấm Create", "Opens suno.com/create with CUA, never clicks Create")},
 		{ID: "align", Step: "align", Label: tr("Canh lời", "Align lyrics"), Kind: "script", Heavy: true, Hint: tr("Tách giọng + Whisper, khoảng 3 phút", "Vocal separation + Whisper, about 3 minutes")},
-		{ID: "trim", Step: "trim", Label: tr("Cắt intro", "Trim intro"), Kind: "script", Heavy: true, Hint: tr("Bỏ các câu nhạc dạo cho giọng vào ~11s", "Drops intro phrases so the vocal starts at ~11s")},
 		{ID: "scenes.agent", Step: "scenes", Label: tr("Agent lên danh sách cảnh", "Agent plans the scenes"), Kind: "agent", Hint: tr("Viết scenes vào project.json theo lời", "Writes scenes into project.json from the lyrics")},
 		{ID: "images", Step: "scenes", Label: tr("Tạo ảnh còn thiếu", "Generate missing images"), Kind: "script", Hint: tr("4 ảnh song song, nguồn chọn ở Cài đặt", "4 images at once, provider set in Settings"), Secrets: []string{"image"}},
 		{ID: "stills", Step: "stills", Label: tr("Render khung hình xem trước", "Render preview frames"), Kind: "script", Heavy: true, Hint: tr("Tựa đề, đếm ngược, giữa câu, đoạn kết", "Title, countdown, mid-line, ending")},
@@ -194,7 +192,7 @@ func sceneRetimeBody(dir string) string {
 
 // pipelineSpecs lays out a chain of runs: specs plus, for each, the indexes it waits on.
 // "suno": [reference analysis] ‖ lyric review → arrangement & Styles.
-// "video": align → trim → scenes → images → stills → render, skipping steps already done.
+// "video": align → scenes → images → stills → render (+ sheet), skipping steps already done.
 func pipelineSpecs(name string, cfg Config, d ProjectDetail, req ActionRequest) ([]RunSpec, [][]int, error) {
 	agent := req.Agent
 	if agent == "" {
@@ -283,13 +281,7 @@ func pipelineSpecs(name string, cfg Config, d ProjectDetail, req ActionRequest) 
 				return nil, nil, err
 			}
 		}
-		// trim only when the voice enters late; with fresh timings the script decides itself
-		if len(pc.IntroCut) == 0 && (realign || status["trim"] == "todo") {
-			if err := addScript("trim", last()); err != nil {
-				return nil, nil, err
-			}
-		}
-		timed := last() // the lead sheet only needs final timings, so it runs beside the scene work
+		timed := last() // the lead sheet only needs the timings, so it runs beside the scene work
 		header := projectPromptHeader(cfg.SkillDir, d.Dir) + "\n"
 		switch {
 		case len(pc.Scenes) == 0:
@@ -344,15 +336,6 @@ for f in "$@"; do echo "== $(basename "$f")"; "$PY" scripts/analyze-reference.py
 			return nil, "", errors.New(tr("chưa có file nhạc", "no audio file yet"))
 		}
 		return []string{"/bin/bash", "-c", py + `scripts/karaoke-align.py "$1"`, "align", dir}, tr("Canh lời từng chữ", "Word-by-word alignment"), nil
-	case "trim":
-		if len(d.Timings) == 0 && !req.chained {
-			return nil, "", errors.New(tr("chưa có timing: chạy Canh lời trước", "no timing yet: run Align lyrics first"))
-		}
-		at := req.VocalAt
-		if at < 5 || at > 30 {
-			at = 11.5
-		}
-		return []string{"/bin/bash", "-c", py + `scripts/trim-intro.py "$1" --vocal-at "$2"`, "trim", dir, fmt.Sprintf("%.2f", at)}, tr("Rút ngắn intro", "Trim intro"), nil
 	case "images":
 		return []string{"python3", "scripts/generate-scene-images.py", dir}, tr("Tạo ảnh cảnh", "Generate scene images"), nil
 	case "stills":

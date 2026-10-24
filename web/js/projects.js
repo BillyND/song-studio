@@ -11,7 +11,7 @@ export function ProjectsPage() {
   return html`<div class="page">
     <div class="page-head">
       <div><div class="eyebrow">Song Studio</div><h1>${t("Bài hát")}</h1>
-        <div class="muted" style="margin-top:6px">${t("Mỗi bài, thuộc thể loại nào cũng vậy, đi qua 9 bước: từ lời tới bài hát, video karaoke và bản nhạc. Bấm vào một bài để làm tiếp.")}</div></div>
+        <div class="muted" style="margin-top:6px">${t("Mỗi bài, thuộc thể loại nào cũng vậy, đi qua 8 bước: từ lời tới bài hát, video karaoke và bản nhạc. Bấm vào một bài để làm tiếp.")}</div></div>
       <${Btn} kind="primary" icon="plus" onClick=${() => setCreating(true)}>${t("Bài mới")}</${Btn}>
     </div>
     ${list === null ? html`<div class="empty"><${Icon} name="loader" class="spin" size=${22} /></div>` : html`

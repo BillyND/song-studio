@@ -394,7 +394,7 @@ func TestReferenceSongs(t *testing.T) {
 		}
 		return Step{}
 	}
-	if d, _ := p.Detail(slug, nil); len(d.Steps) != 9 || d.Steps[0].ID != "lyrics" {
+	if d, _ := p.Detail(slug, nil); len(d.Steps) != 8 || d.Steps[0].ID != "lyrics" {
 		t.Fatalf("workflow should start at the lyrics step: %+v", d.Steps[0])
 	}
 	if _, err := p.AddRef(slug, "notes.txt", strings.NewReader("x")); err == nil {
@@ -559,7 +559,7 @@ func TestVideoPipelineBeforeAlignment(t *testing.T) {
 	for _, s := range specs {
 		steps = append(steps, s.Step)
 	}
-	if strings.Join(steps, ",") != "align,trim,scenes,scenes,stills,render,sheet" {
+	if strings.Join(steps, ",") != "align,scenes,scenes,stills,render,sheet" {
 		t.Fatalf("chain %v", steps)
 	}
 	for i := 1; i < len(deps)-1; i++ {
@@ -567,11 +567,11 @@ func TestVideoPipelineBeforeAlignment(t *testing.T) {
 			t.Fatalf("link %d should wait for %d: %v", i, i-1, deps[i])
 		}
 	}
-	// the lead sheet needs only the trimmed timings, so it waits for trim, not for the render
-	if last := deps[len(deps)-1]; len(last) != 1 || last[0] != 1 {
-		t.Fatalf("sheet should wait for trim: %v", last)
+	// the lead sheet needs only the timings, so it waits for align, not for the render
+	if last := deps[len(deps)-1]; len(last) != 1 || last[0] != 0 {
+		t.Fatalf("sheet should wait for align: %v", last)
 	}
-	if !specs[0].Heavy || specs[2].Kind != "agent" || specs[5].FingerprintDir == "" {
+	if !specs[0].Heavy || specs[1].Kind != "agent" || specs[4].FingerprintDir == "" {
 		t.Fatalf("specs %+v", specs)
 	}
 	if _, _, err := pipelineSpecs("video", cs.Get(), ProjectDetail{}, ActionRequest{}); err == nil {
@@ -658,7 +658,7 @@ func TestVideoChainFollowsStaleness(t *testing.T) {
 	time.Sleep(20 * time.Millisecond)
 	p.ImportAudio(slug, "b.m4a", strings.NewReader("audio2"))
 	d, _ = p.Detail(slug, nil)
-	if got := videoChainSteps(t, cs, d); got != "align,trim,retime,scenes,stills,render,sheet" {
+	if got := videoChainSteps(t, cs, d); got != "align,retime,scenes,stills,render,sheet" {
 		t.Fatalf("replaced music should re-align and re-time scenes: %s", got)
 	}
 }

@@ -278,7 +278,6 @@ func deriveSteps(dir string, pc projectConfig, d ProjectDetail, active map[strin
 		{ID: "suno", Title: tr("Prompt Suno", "Suno prompt")},
 		{ID: "audio", Title: tr("Nhạc từ Suno", "Suno audio")},
 		{ID: "align", Title: tr("Canh lời từng chữ", "Word-by-word alignment")},
-		{ID: "trim", Title: tr("Rút ngắn intro", "Trim intro")},
 		{ID: "scenes", Title: tr("Cảnh & ảnh AI", "Scenes & AI images")},
 		{ID: "stills", Title: tr("Xem trước khung hình", "Preview frames")},
 		{ID: "render", Title: tr("Xuất video karaoke", "Render karaoke video")},
@@ -329,20 +328,6 @@ func deriveSteps(dir string, pc projectConfig, d ProjectDetail, active map[strin
 		set("align", "stale", tr("Nhạc mới hơn timing", "Audio is newer than the timing"))
 	default:
 		set("align", "done", fmt.Sprintf(tr("%d câu", "%d lines"), len(d.Timings)))
-	}
-	first := 0.0
-	if len(d.Timings) > 0 {
-		first = d.Timings[0].Start
-	}
-	switch {
-	case len(pc.IntroCut) == 2:
-		set("trim", "done", fmt.Sprintf(tr("Đã cắt %.1fs → %.1fs, hát ở %.1fs", "Cut %.1fs → %.1fs, vocals at %.1fs"), pc.IntroCut[0], pc.IntroCut[1], first))
-	case len(d.Timings) == 0:
-		set("trim", "todo", tr("Cần canh lời trước", "Align the lyrics first"))
-	case first <= 15:
-		set("trim", "skip", fmt.Sprintf(tr("Giọng vào ở %.1fs, không cần cắt", "Vocals start at %.1fs, no cut needed"), first))
-	default:
-		set("trim", "todo", fmt.Sprintf(tr("Giọng vào ở %.1fs, nên cắt về ~11s", "Vocals start at %.1fs, trim to about 11s"), first))
 	}
 	need, have := 0, 0
 	for _, s := range pc.Scenes {

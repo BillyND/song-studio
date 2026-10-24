@@ -1,6 +1,6 @@
 # Song Studio
 
-A Mac app for the `suno-que-huong` skill. Each song goes through nine steps, from lyrics to a
+A Mac app for the `suno-que-huong` skill. Each song goes through eight steps, from lyrics to a
 song, a 1080p karaoke video and a lead sheet. Every step either runs one of the skill's scripts
 directly or hands the work to a coding agent (Claude Code, omp or Codex), and the studio shows the
 agent's work live: its replies, thinking, each tool call with its output, cost and duration.
@@ -94,7 +94,6 @@ Server flags: `-addr 127.0.0.1:4317`, `-no-open`, `-config`, `-data`, `-bundled-
 | Prompt Suno | `suno/lyrics.txt` and `suno/style.txt` exist and are newer than the lyrics, brief and analyses | chain status, copy/edit blocks, agent: fill suno.com/create via CUA (never presses Create) |
 | Nhạc từ Suno | `project.json` `audio` points at a file | drop the M4A, pick a recent Downloads file, or paste a path |
 | Canh lời | `work/timings.json` exists | script `karaoke-align.py` |
-| Rút ngắn intro | intro cut, or the voice already enters before 15 s | script `trim-intro.py` (a no-op when nothing needs cutting) |
 | Cảnh & ảnh AI | every non-reused scene has `img/<id>.png` | agent: plan scenes; script: generate missing images |
 | Xem trước | stills exist and were rendered from the current inputs | script: render stills (`still auto` picks the checkpoints) |
 | Xuất video | an MP4 exists and was rendered from the current inputs | **Làm video tự động** (whole chain), or render only |
@@ -131,21 +130,32 @@ The New Song dialog takes the same reference songs and brief, and by default sta
 
 **Tạo prompt Suno** queues a chain: reference analysis (if any file is unanalysed) runs in
 parallel with the lyric-review agent; the arrangement agent starts when both succeed and
-writes Styles, section-tag descriptions, `suno/profile.md`, `vocal` and `profile`. A failed link
+writes Styles, section-tag descriptions, `vocal` and `profile`. A failed link
 fails the links after it instead of leaving them waiting. **Làm video tự động** chains align →
-trim → scenes agent → images → stills → render and skips links that are already done; the
-lead sheet runs right after trim, beside the scene work. The
+scenes agent → images → stills → render and skips links that are already done; the
+lead sheet runs right after alignment, beside the scene work. The
 console shows the whole chain above the timeline; click a link to follow it.
 
 Jobs are either heavy (vocal separation, alignment, analysis, stills, render: default 1 at a
 time) or light (agents and image downloads: default 3 in parallel). Both limits are in Cài đặt.
 Default credits for new songs and the image model are there too.
 
+## Interface language
+
+Cài đặt → **Ngôn ngữ · Language** switches the whole interface between Tiếng Việt and English:
+the web UI (`t()` with `web/js/i18n/en-*.js`), text from the server (`tr()` in Go), the app's
+menus and dialogs, and Sparkle's update windows. Saving reloads the page; the menus follow on the
+next page load. When the studio is in English, agents write their notes and replies in English.
+Lyrics, song titles, credit labels and saved prompt snippets are your data and are not translated.
+
+The intro-trimming step was removed: songs play from Suno's own intro. Songs trimmed earlier keep
+their trimmed audio.
+
 ## Genres, sung language and video look
 
 Each song has a **Thể loại** (quê hương, bolero, ballad, pop, rock, rap, EDM, acoustic, thiếu
 nhi, thánh ca, nhạc cách mạng, or none) and a **Ngôn ngữ hát** (Vietnamese by default), chosen
-in Bài hát mới or at the top of step 1. The UI stays Vietnamese.
+in Bài hát mới or at the top of step 1.
 
 - The agents are told both; the arrangement still follows the reference song and brief.
 - The genre's suggested snippets appear first among the prompt chips.
@@ -222,7 +232,7 @@ at 390 px and 768 px in Chrome) for a narrow browser window on the Mac.
   "Bị gián đoạn"; the next start carries on with the chain.
 - **Time limits.** Agents and renders stop after 90 minutes, other heavy scripts after 45,
   light scripts after 30; the run fails with "quá giới hạn …".
-- **No half files.** Videos, trimmed audio, timings, sheets and images are written to a
+- **No half files.** Videos, timings, sheets and images are written to a
   `.part` file and renamed when complete.
 - **Image errors.** Network errors, 429 and 5xx are retried with backoff; a content refusal
   or a rejected key stops that scene at once with the reason in Vietnamese.
@@ -251,7 +261,7 @@ Run on the installed app against a real song ("Ninh Bình – Đẹp Tựa Vần
   lyric review in parallel, then arrangement; about 1.5 minutes.
 - **Agent điền form Suno** (omp): filled suno.com/create through CUA in about 4 minutes, values
   verified, Create left for the user.
-- **Làm video tự động** clicked in the UI: align → trim → scenes agent → images → stills → render
+- **Làm video tự động** clicked in the UI: align → scenes agent → images → stills → render
   produced a 1080p video in about 12 minutes; re-run on the final build skipped finished steps
   (images → stills → render) and a second click was refused while the chain ran.
 - Every page of two songs (20 views) loads without JavaScript errors; no horizontal overflow at

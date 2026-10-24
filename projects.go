@@ -431,7 +431,7 @@ func (p Projects) Create(title, subtitle, lyrics string, credits [][2]string) (s
 	}
 	cfg := map[string]any{
 		"title": title, "subtitle": strings.TrimSpace(subtitle), "credits": cr,
-		"karaoke_color": "pink", "badge": false, "image_model": p.cfg.Get().ImageModel, "scenes": []any{},
+		"karaoke_color": "pink", "badge": false, "scenes": []any{},
 	}
 	return slug, writeJSONAtomic(filepath.Join(dir, "project.json"), cfg, 0o644)
 }

@@ -1,5 +1,5 @@
 // One song's workspace: the eight-step workflow with script and agent actions.
-import { html, useState, useEffect, useRef, api, toast, toastError, openRun, bumpRuns, go, ago, secs, bytes, media, copyText, useStore, runDuration } from "./core.js";
+import { html, useState, useEffect, useRef, api, toast, toastError, openRun, bumpRuns, go, ago, secs, bytes, media, copyText, useStore, runDuration, store } from "./core.js";
 import { Icon } from "./icons.js";
 import { Btn, StatusPill, Seg, Switch, Modal, Lightbox, Markdown, Empty, AgentPicker, useAgentChoice, AgentIcon, Field, PresetChips } from "./ui.js";
 
@@ -421,7 +421,7 @@ function ScenesStep({ d, slug, reload, stamp }) {
   const imgs = new Set(d.images);
   return html`<div class="stack">
     <${AgentAction} slug=${slug} action="scenes.agent" title="Lên danh sách cảnh theo lời" hint="Ghi scenes vào project.json: mỗi cảnh đổi ở đầu một câu, prompt tiếng Anh nêu đúng địa danh" />
-    <${ActionCard} title="Tạo ảnh còn thiếu" hint=${`Model ${cfg.image_model || "gpt-image-2.5"} · 4 ảnh song song · ảnh đã có được giữ, xoá file để tạo lại`} onRun=${() => runAction(slug, "images")} label="Tạo ảnh" icon="image" />
+    <${ActionCard} title="Tạo ảnh còn thiếu" hint=${`${imageSource()} · 4 ảnh song song · ảnh đã có được giữ, xoá file để tạo lại`} onRun=${() => runAction(slug, "images")} label="Tạo ảnh" icon="image" />
     <div class="row"><h3>${scenes.length} cảnh</h3><span class="spacer"></span><${Btn} size="sm" icon="code" onClick=${() => setEditing(true)}>Sửa project.json</${Btn}></div>
     ${scenes.length > 0 && html`<div class="scroll-x" style="max-height:380px"><table class="table"><thead><tr><th>Bắt đầu</th><th>Cảnh</th><th>Prompt</th><th></th></tr></thead><tbody>
       ${scenes.map((s) => { const img = `img/${s.id}.png`; return html`<tr><td class="num">${secs(s.start)}</td><td class="mono small">${s.id}</td>
@@ -458,6 +458,13 @@ function StillsStep({ d, slug, stamp }) {
       <figcaption>${secs(parseFloat(s.replace(/.*still-/, "")))}</figcaption></figure>`)}</div>` : html`<${Empty} icon="eye" title="Chưa có khung hình">Render vài khung để kiểm tra chữ, micro và cảnh trước khi xuất cả video.</${Empty}>`}
     ${box && html`<${Lightbox} src=${media(slug, box, stamp)} caption=${box} onClose=${() => setBox(null)} />`}
   </div>`;
+}
+
+// imageSource names the provider and model chosen in Settings, for step hints.
+function imageSource() {
+  const im = store.get().boot?.config?.image;
+  if (!im) return "Nguồn ảnh ở Cài đặt";
+  return `${{ hub: "Hub ảnh", openai: "OpenAI", gemini: "Google Gemini" }[im.provider] || im.provider} · ${im.models?.[im.provider] || ""}`;
 }
 
 const SHEET_KEYS = [["orig", "Như giọng hát"], ["C", "Đô (C)"], ["D", "Rê (D)"], ["E", "Mi (E)"], ["F", "Fa (F)"], ["G", "Sol (G)"], ["A", "La (A)"], ["Bb", "Si giáng (Bb)"], ["Eb", "Mi giáng (Eb)"]];

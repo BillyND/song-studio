@@ -16,6 +16,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -44,6 +45,7 @@ type App struct {
 	cfg      *ConfigStore
 	runs     *Manager
 	projects Projects
+	secrets  SecretStore
 	token    string
 	home     string
 	version  string
@@ -63,6 +65,11 @@ func (a *App) routes() http.Handler {
 	mux.HandleFunc("GET /api/bootstrap", a.bootstrap)
 	mux.HandleFunc("GET /api/system", a.system)
 	mux.HandleFunc("PUT /api/settings", a.putSettings)
+	mux.HandleFunc("GET /api/secrets", a.listSecrets)
+	mux.HandleFunc("PUT /api/secrets/{name}", a.putSecret)
+	mux.HandleFunc("DELETE /api/secrets/{name}", a.deleteSecret)
+	mux.HandleFunc("POST /api/secrets/{name}/check", a.checkSecret)
+	mux.HandleFunc("POST /api/secrets/import-legacy", a.importLegacySecret)
 	mux.HandleFunc("POST /api/shutdown", a.shutdown)
 
 	mux.HandleFunc("GET /api/projects", a.listProjects)
@@ -493,7 +500,7 @@ func (a *App) projectAction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	cfg := a.cfg.Get()
-	spec := RunSpec{Kind: act.Kind, Step: act.Step, Project: slug, Cwd: cfg.SkillDir, Heavy: act.Heavy}
+	spec := RunSpec{Kind: act.Kind, Step: act.Step, Project: slug, Cwd: cfg.SkillDir, Heavy: act.Heavy, Secrets: act.Secrets}
 	if act.Kind == "agent" {
 		agent := req.Agent
 		if agent == "" {
@@ -864,4 +871,92 @@ fi`
 		return
 	}
 	writeJSON(w, 202, meta)
+}
+
+// ---------- secrets ----------
+
+func (a *App) secretEnv(names []string) []string {
+	if slices.Contains(names, "image") {
+		return imageEnv(a.cfg.Get(), a.secrets)
+	}
+	return nil
+}
+
+func secretName(r *http.Request) (string, error) {
+	name := r.PathValue("name")
+	if !slices.Contains(secretNames, name) {
+		return "", errors.New("tên khoá không hợp lệ")
+	}
+	return name, nil
+}
+
+func (a *App) listSecrets(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, 200, map[string]any{"secrets": secretInfos(a.secrets), "legacy": exists(legacyHubKey(a.home))})
+}
+
+func (a *App) putSecret(w http.ResponseWriter, r *http.Request) {
+	name, err := secretName(r)
+	if err != nil {
+		failFor(w, err)
+		return
+	}
+	var req struct {
+		Value string `json:"value"`
+	}
+	if err := decode(r, &req); err != nil {
+		failFor(w, err)
+		return
+	}
+	v := strings.TrimSpace(req.Value)
+	if len(v) < 8 || len(v) > 512 || strings.ContainsAny(v, " \t\r\n") {
+		failFor(w, errors.New("khoá trông không đúng: dán đúng một dòng khoá"))
+		return
+	}
+	if err := a.secrets.Set(name, v); err != nil {
+		failFor(w, err)
+		return
+	}
+	writeJSON(w, 200, map[string]any{"secrets": secretInfos(a.secrets)})
+}
+
+func (a *App) deleteSecret(w http.ResponseWriter, r *http.Request) {
+	name, err := secretName(r)
+	if err != nil {
+		failFor(w, err)
+		return
+	}
+	_ = a.secrets.Delete(name)
+	writeJSON(w, 200, map[string]any{"secrets": secretInfos(a.secrets)})
+}
+
+func (a *App) checkSecret(w http.ResponseWriter, r *http.Request) {
+	name, err := secretName(r)
+	if err != nil {
+		failFor(w, err)
+		return
+	}
+	key, err := a.secrets.Get(name)
+	if err != nil {
+		failFor(w, err)
+		return
+	}
+	if err := checkImageKey(a.cfg.Get(), strings.TrimPrefix(name, "image."), key, nil); err != nil {
+		writeJSON(w, 200, map[string]any{"ok": false, "error": err.Error()})
+		return
+	}
+	writeJSON(w, 200, map[string]any{"ok": true})
+}
+
+// importLegacySecret copies the old key file into the keychain; the file stays for scripts run outside the studio.
+func (a *App) importLegacySecret(w http.ResponseWriter, r *http.Request) {
+	v := readLegacyHubKey(a.home)
+	if v == "" {
+		failFor(w, os.ErrNotExist)
+		return
+	}
+	if err := a.secrets.Set("image.hub", v); err != nil {
+		failFor(w, err)
+		return
+	}
+	writeJSON(w, 200, map[string]any{"secrets": secretInfos(a.secrets)})
 }

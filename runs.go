@@ -39,6 +39,11 @@ type RunSpec struct {
 	// After lists run IDs that must succeed before this one starts; Group ties a chain together.
 	After []string `json:"after,omitempty"`
 	Group string   `json:"group,omitempty"`
+	// Secrets names the credentials this run needs ("image"); they are resolved into the
+	// child's environment when it starts and are never stored with the run.
+	Secrets []string `json:"secrets,omitempty"`
+	// TimeoutSec ends a run that takes longer; 0 picks a default from the kind of run.
+	TimeoutSec int `json:"timeoutSec,omitempty"`
 }
 
 // RunMeta is the persisted, JSON-visible state of a run.
@@ -65,8 +70,11 @@ type run struct {
 	subs    map[chan Event]struct{}
 	cmd     *exec.Cmd
 	stopped bool
-	logFile *os.File
-	done    chan struct{}
+	// timedOut, requeue and interrupted say why a stopped run ended: past its time limit,
+	// or the studio quit (a script runs again on the next start, an agent does not).
+	timedOut, requeue, interrupted bool
+	logFile                        *os.File
+	done                           chan struct{}
 }
 
 // Manager queues and executes runs, persisting each under dataDir/runs/<id>.
@@ -79,8 +87,10 @@ type Manager struct {
 	wake  chan struct{}
 	// OnFinish runs after a run reaches a final state (set before Submit is used).
 	OnFinish func(RunMeta)
-	closed   bool
-	wg       sync.WaitGroup
+	// SecretEnv turns RunSpec.Secrets into environment entries for that child only.
+	SecretEnv func(names []string) []string
+	closed    bool
+	wg        sync.WaitGroup
 }
 
 func newManager(dataDir string, limit func() (heavy, light int)) (*Manager, error) {
@@ -89,9 +99,12 @@ func newManager(dataDir string, limit func() (heavy, light int)) (*Manager, erro
 		return nil, err
 	}
 	m.loadHistory()
-	go m.scheduler()
+	go m.scheduler() // the caller pokes once its hooks are set, so resumed runs get their secrets
 	return m, nil
 }
+
+// Start schedules runs left queued by the previous studio process.
+func (m *Manager) Start() { m.poke() }
 
 func (m *Manager) loadHistory() {
 	entries, _ := os.ReadDir(m.dir)
@@ -104,12 +117,21 @@ func (m *Manager) loadHistory() {
 		if json.Unmarshal(data, &meta) != nil || meta.ID == "" {
 			continue
 		}
-		if meta.active() { // the previous studio process died while this ran
-			meta.Status = "interrupted"
-			if meta.Ended.IsZero() {
-				meta.Ended = time.Now()
+		if meta.Status == "running" { // the previous studio process died while this ran
+			if meta.Kind == "script" {
+				resetForRetry(&meta) // scripts are idempotent: run again
+			} else {
+				meta.Status = "interrupted"
+				if meta.Ended.IsZero() {
+					meta.Ended = time.Now()
+				}
 			}
 			_ = writeJSONAtomic(filepath.Join(m.dir, meta.ID, "meta.json"), meta, 0o644)
+		}
+		if meta.Status == "queued" { // still waiting: keep it in the queue
+			m.runs[meta.ID] = &run{meta: meta, subs: map[chan Event]struct{}{}, done: make(chan struct{})}
+			m.order = append(m.order, meta.ID)
+			continue
 		}
 		m.runs[meta.ID] = &run{meta: meta, done: closedChan()}
 		m.order = append(m.order, meta.ID)
@@ -339,6 +361,9 @@ func (m *Manager) execute(r *run) {
 	cmd := exec.Command(spec.Argv[0], spec.Argv[1:]...)
 	cmd.Dir = spec.Cwd
 	cmd.Env = childEnv()
+	if len(spec.Secrets) > 0 && m.SecretEnv != nil {
+		cmd.Env = append(cmd.Env, m.SecretEnv(spec.Secrets)...)
+	}
 	cmd.Stdin = nil // agents must not wait for terminal input
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	// A detached grandchild can keep our pipes open after the main process exits;
@@ -372,6 +397,15 @@ func (m *Manager) execute(r *run) {
 	}
 	r.persist(m.dir)
 	r.emit(m.dir, Event{Kind: "status", Title: "Đang chạy", Body: fmt.Sprintf("PID %d · %s", cmd.Process.Pid, shortCmd(spec.Argv))})
+	limit := runTimeout(spec)
+	timer := time.AfterFunc(limit, func() {
+		r.mu.Lock()
+		r.timedOut, r.stopped = true, true
+		r.mu.Unlock()
+		r.emit(m.dir, Event{Kind: "status", Title: "Quá giới hạn thời gian, đang dừng", Body: limit.String(), Error: true})
+		m.terminate(r, cmd.Process.Pid)
+	})
+	defer timer.Stop()
 
 	parser := newParser(spec.Kind, spec.Agent)
 	var wg sync.WaitGroup
@@ -447,6 +481,13 @@ func (m *Manager) finish(r *run, code int, err error) {
 	r.meta.Ended = time.Now()
 	r.meta.ExitCode = &code
 	switch {
+	case r.requeue:
+		resetForRetry(&r.meta)
+	case r.interrupted:
+		r.meta.Status = "interrupted"
+	case r.timedOut:
+		r.meta.Status = "failed"
+		r.meta.Error = fmt.Sprintf("quá giới hạn %s", runTimeout(r.meta.RunSpec))
 	case r.stopped:
 		r.meta.Status = "stopped"
 	case err != nil:
@@ -644,14 +685,28 @@ func killGroup(pid int, sig syscall.Signal) {
 	}
 }
 
-// Shutdown stops every active run and waits briefly for them to exit.
+// Shutdown stops running work and waits briefly for it to exit. Queued runs stay queued
+// on disk, and running scripts are queued again, so the next start carries on.
 func (m *Manager) Shutdown(timeout time.Duration) {
 	m.mu.Lock()
 	m.closed = true
 	ids := append([]string(nil), m.order...)
 	m.mu.Unlock()
 	for _, id := range ids {
-		_ = m.Stop(id)
+		r, ok := m.Get(id)
+		if !ok {
+			continue
+		}
+		r.mu.Lock()
+		running := r.meta.Status == "running"
+		if running {
+			r.requeue = r.meta.Kind == "script"
+			r.interrupted = !r.requeue
+		}
+		r.mu.Unlock()
+		if running {
+			_ = m.Stop(id)
+		}
 	}
 	done := make(chan struct{})
 	go func() { m.wg.Wait(); close(done) }()
@@ -687,6 +742,10 @@ func childEnv() []string {
 	for _, kv := range os.Environ() {
 		// a studio started from inside an agent session must not make children think they are nested
 		if strings.HasPrefix(kv, "CLAUDECODE=") || strings.HasPrefix(kv, "CLAUDE_CODE_ENTRYPOINT=") {
+			continue
+		}
+		// image keys reach only the image run, through SecretEnv; never every agent
+		if strings.HasPrefix(kv, "QH_IMAGE_") || strings.HasPrefix(kv, "AIHUB_API_KEY=") {
 			continue
 		}
 		env = append(env, kv)
@@ -731,4 +790,28 @@ var progressBar = regexp.MustCompile(`\d+%\|`)
 func noisyStderr(line string) bool {
 	l := strings.ToLower(line)
 	return strings.Contains(l, "rmcp::transport") || progressBar.MatchString(line)
+}
+
+// resetForRetry puts a run back in the queue as if it had not started.
+func resetForRetry(meta *RunMeta) {
+	meta.Status = "queued"
+	meta.Started, meta.Ended = time.Time{}, time.Time{}
+	meta.PID, meta.ExitCode, meta.Error = 0, nil, ""
+}
+
+// runTimeout bounds a run so a hung job cannot hold its slot forever.
+func runTimeout(spec RunSpec) time.Duration {
+	if spec.TimeoutSec > 0 {
+		return time.Duration(spec.TimeoutSec) * time.Second
+	}
+	switch {
+	case spec.Kind == "agent":
+		return 90 * time.Minute
+	case spec.Step == "render":
+		return 90 * time.Minute
+	case spec.Heavy:
+		return 45 * time.Minute
+	default:
+		return 30 * time.Minute
+	}
 }

@@ -34,6 +34,8 @@ type Action struct {
 	Kind  string `json:"kind"` // script or agent
 	Heavy bool   `json:"heavy,omitempty"`
 	Hint  string `json:"hint"`
+	// Secrets the script needs in its environment (see Manager.SecretEnv).
+	Secrets []string `json:"-"`
 }
 
 var workflowActions = []Action{
@@ -45,7 +47,7 @@ var workflowActions = []Action{
 	{ID: "align", Step: "align", Label: "Canh lời", Kind: "script", Heavy: true, Hint: "Tách giọng + Whisper, khoảng 3 phút"},
 	{ID: "trim", Step: "trim", Label: "Cắt intro", Kind: "script", Heavy: true, Hint: "Bỏ các câu nhạc dạo cho giọng vào ~11s"},
 	{ID: "scenes.agent", Step: "scenes", Label: "Agent lên danh sách cảnh", Kind: "agent", Hint: "Viết scenes vào project.json theo lời"},
-	{ID: "images", Step: "scenes", Label: "Tạo ảnh còn thiếu", Kind: "script", Hint: "4 ảnh song song qua hub ảnh"},
+	{ID: "images", Step: "scenes", Label: "Tạo ảnh còn thiếu", Kind: "script", Hint: "4 ảnh song song, nguồn chọn ở Cài đặt", Secrets: []string{"image"}},
 	{ID: "stills", Step: "stills", Label: "Render khung hình xem trước", Kind: "script", Heavy: true, Hint: "Tựa đề, đếm ngược, giữa câu, đoạn kết"},
 	{ID: "render", Step: "render", Label: "Xuất video", Kind: "script", Heavy: true, Hint: "MP4 1080p, khoảng 8–9 phút"},
 	{ID: "sheet", Step: "sheet", Label: "Chép bản nhạc", Kind: "script", Heavy: true, Hint: "Giai điệu và lời từ giọng hát, ra PDF; khoảng 30 giây"},
@@ -198,7 +200,7 @@ func pipelineSpecs(name string, cfg Config, d ProjectDetail, req ActionRequest) 
 		if err != nil {
 			return err
 		}
-		spec := RunSpec{Kind: "script", Step: act.Step, Project: d.Slug, Cwd: cfg.SkillDir, Argv: argv, Title: title, Heavy: act.Heavy}
+		spec := RunSpec{Kind: "script", Step: act.Step, Project: d.Slug, Cwd: cfg.SkillDir, Argv: argv, Title: title, Heavy: act.Heavy, Secrets: act.Secrets}
 		if id == "stills" || id == "render" {
 			spec.FingerprintDir = d.Dir
 		}

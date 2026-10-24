@@ -65,12 +65,14 @@ func main() {
 	if err != nil {
 		fatal(err)
 	}
-	app := &App{cfg: cfg, runs: runs, projects: Projects{cfg: cfg}, token: newToken(), home: home, version: version, build: webBuild(), started: time.Now()}
+	app := &App{cfg: cfg, runs: runs, projects: Projects{cfg: cfg}, secrets: newKeychainStore(), token: newToken(), home: home, version: version, build: webBuild(), started: time.Now()}
 	runs.OnFinish = func(m RunMeta) {
 		if m.Status == "succeeded" && m.InputsHash != "" && m.Project != "" {
 			_ = app.projects.RecordStamp(m.Project, m.Step, m.InputsHash)
 		}
 	}
+	runs.SecretEnv = app.secretEnv
+	runs.Start()
 	srv := &http.Server{Handler: app.routes(), ReadHeaderTimeout: 10 * time.Second}
 
 	go func() {

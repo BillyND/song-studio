@@ -5,6 +5,9 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"regexp"
+	"slices"
+	"strings"
 	"sync"
 )
 
@@ -20,14 +23,36 @@ type Config struct {
 	SkillDir       string                 `json:"skillDir"`
 	ProjectsDir    string                 `json:"projectsDir"`
 	DefaultAgent   string                 `json:"defaultAgent"`
-	PermissionMode string                 `json:"permissionMode"` // "full" or "edits"
-	MaxConcurrent  int                    `json:"maxConcurrent"`  // heavy jobs at once (CPU-bound scripts)
-	MaxAgents      int                    `json:"maxAgents"`      // light jobs at once (agents, image downloads)
-	Credits        [][2]string            `json:"credits"`        // prefilled on new songs
-	ImageModel     string                 `json:"imageModel"`
+	PermissionMode string                 `json:"permissionMode"`       // "full" or "edits"
+	MaxConcurrent  int                    `json:"maxConcurrent"`        // heavy jobs at once (CPU-bound scripts)
+	MaxAgents      int                    `json:"maxAgents"`            // light jobs at once (agents, image downloads)
+	Credits        [][2]string            `json:"credits"`              // prefilled on new songs
+	ImageModel     string                 `json:"imageModel,omitempty"` // before Image existed; migrated into Image.Models["hub"]
+	Image          ImageConfig            `json:"image"`
 	Agents         map[string]AgentConfig `json:"agents"`
 	Presets        []Preset               `json:"presets"`
 }
+
+// ImageConfig picks the scene-image provider. Keys live in the keychain, never here.
+type ImageConfig struct {
+	Provider string            `json:"provider"` // hub, openai or gemini
+	BaseURL  string            `json:"baseUrl"`  // the hub's OpenAI-compatible endpoint
+	Models   map[string]string `json:"models"`   // model id per provider
+	Size     string            `json:"size"`     // WxH for OpenAI-shaped APIs
+	Quality  string            `json:"quality"`
+}
+
+var imageProviders = []string{"hub", "openai", "gemini"}
+
+var defaultImage = ImageConfig{
+	Provider: "hub",
+	BaseURL:  "https://aihub.tigrendev.com/v1",
+	Models:   map[string]string{"hub": "gpt-image-2.5", "openai": "gpt-image-2.5-flare", "gemini": "gemini-nano-banana-2.1"},
+	Size:     "2048x1152",
+	Quality:  "high",
+}
+
+var imageSize = regexp.MustCompile(`^[1-9][0-9]{2,3}x[1-9][0-9]{2,3}$`)
 
 // Preset is a reusable instruction snippet the UI can append to any agent request.
 type Preset struct {
@@ -57,7 +82,8 @@ func defaultConfig(home string) Config {
 		MaxConcurrent:  1,
 		MaxAgents:      3,
 		Credits:        [][2]string{{"Sáng tác: ", ""}, {"Phổ nhạc: ", ""}},
-		ImageModel:     "gpt-image-2.5",
+		// Image is filled by normalizeImage: sharing defaultImage.Models here would let
+		// json.Unmarshal write a user's models into the package default
 		Presets:        defaultPresets,
 		Agents: map[string]AgentConfig{
 			"claude": {Bin: firstExisting("/opt/homebrew/bin/claude", "claude"), Model: ""},
@@ -130,9 +156,8 @@ func normalizeConfig(cfg *Config, home string) {
 	if len(cfg.Credits) == 0 {
 		cfg.Credits = def.Credits
 	}
-	if cfg.ImageModel == "" {
-		cfg.ImageModel = def.ImageModel
-	}
+	normalizeImage(&cfg.Image, cfg.ImageModel)
+	cfg.ImageModel = ""
 	if cfg.Agents == nil {
 		cfg.Agents = map[string]AgentConfig{}
 	}
@@ -219,4 +244,32 @@ func contains(list []string, v string) bool {
 		}
 	}
 	return false
+}
+
+func normalizeImage(im *ImageConfig, legacyModel string) {
+	if !slices.Contains(imageProviders, im.Provider) {
+		im.Provider = defaultImage.Provider
+	}
+	// plain http only to this machine (a local gateway); anything else must be https
+	local := strings.HasPrefix(im.BaseURL, "http://127.0.0.1") || strings.HasPrefix(im.BaseURL, "http://localhost")
+	if !strings.HasPrefix(im.BaseURL, "https://") && !local {
+		im.BaseURL = defaultImage.BaseURL
+	}
+	models := map[string]string{}
+	for _, p := range imageProviders {
+		models[p] = strings.TrimSpace(im.Models[p])
+		if models[p] == "" {
+			models[p] = defaultImage.Models[p]
+		}
+	}
+	if legacyModel != "" && strings.TrimSpace(im.Models["hub"]) == "" {
+		models["hub"] = legacyModel
+	}
+	im.Models = models
+	if !imageSize.MatchString(im.Size) {
+		im.Size = defaultImage.Size
+	}
+	if !slices.Contains([]string{"low", "medium", "high"}, im.Quality) {
+		im.Quality = defaultImage.Quality
+	}
 }

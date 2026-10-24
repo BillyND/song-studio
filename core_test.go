@@ -147,7 +147,7 @@ func TestAgentArgv(t *testing.T) {
 	cfg.Agents["claude"] = AgentConfig{Bin: "claude", Model: "opus"}
 	argv, _ := agentArgv(cfg, "claude", "", "hi; rm -rf /", "/w")
 	joined := strings.Join(argv, "|")
-	if !strings.Contains(joined, "-p|hi; rm -rf /|") || !strings.Contains(joined, "--model|opus") || !strings.Contains(joined, "bypassPermissions") {
+	if !strings.HasSuffix(joined, "|--|hi; rm -rf /") || !strings.Contains(joined, "--model|opus") || !strings.Contains(joined, "bypassPermissions") {
 		t.Fatalf("claude argv: %v", argv)
 	}
 	cfg.PermissionMode = "edits"

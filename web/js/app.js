@@ -1,8 +1,9 @@
 // App shell: sidebar navigation, system meter, routing, run drawer and toasts.
-import { html, render, useEffect, useErrorBoundary, api, store, useStore, useRoute, theme, toastError, t } from "./core.js";
+import { html, render, useEffect, useErrorBoundary, api, store, useStore, useRoute, theme, toastError, t, openChat, closeChat, localStorageGet } from "./core.js";
 import { Icon } from "./icons.js";
 import { Toasts, Btn } from "./ui.js";
 import { Drawer } from "./console.js";
+import { ChatPanel } from "./chat.js";
 import { ProjectsPage } from "./projects.js";
 import { ProjectPage } from "./project.js";
 import { RunsPage, RunPage } from "./runs.js";
@@ -10,11 +11,16 @@ import { SkillPage } from "./skill.js";
 import { SettingsPage } from "./settings.js";
 
 theme.set(new URLSearchParams(location.search).get("theme") || theme.get());
+const drawerW = localStorageGet("drawerW");
+if (drawerW) document.documentElement.style.setProperty("--drawer", drawerW);
+
+const toggleChat = () => (store.get().chatOpen && !store.get().consoleRun ? closeChat() : openChat(store.get().chatId));
 
 function Sidebar({ route }) {
   const system = useStore((s) => s.system);
   const boot = useStore((s) => s.boot);
   const section = route[0] || "";
+  const chatOn = useStore((s) => s.chatOpen && !s.consoleRun);
   const nav = [
     { href: "#/", icon: "music", label: t("Bài hát"), on: section === "" || section === "p" },
     { href: "#/runs", icon: "terminal", label: t("Lượt chạy"), on: section === "runs", badge: system && (system.running + system.queued) || 0 },
@@ -29,6 +35,8 @@ function Sidebar({ route }) {
       <div class="brand-text"><div class="brand-name">Song Studio</div><div class="brand-sub">${t("Lời → Suno → Video")}</div></div></div>
     ${nav.map((n) => html`<a class=${"nav-item" + (n.on ? " active" : "")} href=${n.href} title=${n.label}><${Icon} name=${n.icon} size=${17} /><span class="nav-label">${n.label}</span>
       ${n.badge ? html`<span class="nav-badge">${n.badge}</span>` : null}</a>`)}
+    <button type="button" class=${"nav-item nav-chat" + (chatOn ? " active" : "")} title=${t("Chat với agent (⌘J)")} onClick=${toggleChat}>
+      <${Icon} name="bot" size=${17} /><span class="nav-label">${t("Chat agent")}</span><kbd class="nav-kbd">⌘J</kbd></button>
     <div class="sidebar-foot">
       <div class="meter" title=${t("Tải trung bình 1 phút so với số nhân CPU")}>
         <div class="meter-row"><span>${t("Tải máy")}</span><b>${load.toFixed(1)} / ${cpus}</b></div>
@@ -71,11 +79,15 @@ function Boundary({ children, resetKey }) {
 function App() {
   const route = useRoute();
   const consoleRun = useStore((s) => s.consoleRun);
+  const chatOpen = useStore((s) => s.chatOpen);
   const boot = useStore((s) => s.boot);
   useEffect(() => {
-    const esc = (e) => e.key === "Escape" && !document.querySelector(".modal-back, .lightbox") && store.set({ consoleRun: null });
-    addEventListener("keydown", esc);
-    return () => removeEventListener("keydown", esc);
+    const keys = (e) => {
+      if (e.key === "Escape" && !document.querySelector(".modal-back, .lightbox")) store.set({ consoleRun: null });
+      if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === "j") { e.preventDefault(); toggleChat(); }
+    };
+    addEventListener("keydown", keys);
+    return () => removeEventListener("keydown", keys);
   }, []);
   useEffect(() => {
     api("/api/bootstrap").then((b) => store.set({ boot: b })).catch(toastError);
@@ -92,10 +104,10 @@ function App() {
     case "settings": page = html`<${SettingsPage} />`; break;
     default: page = html`<${ProjectsPage} />`;
   }
-  return html`<div class=${"shell" + (consoleRun ? " with-drawer" : "")}>
+  return html`<div class=${"shell" + (consoleRun || chatOpen ? " with-drawer" : "")}>
     <${Sidebar} route=${route} />
     <main class="main">${boot && !boot.skillExists ? html`<div class="page"><div class="warn-box">${t("Không thấy skill ở {path}. Sửa đường dẫn trong Cài đặt.", { path: boot.config.skillDir })}</div></div>` : null}<${Boundary} resetKey=${route.join("/")}>${page}</${Boundary}></main>
-    <${Drawer} />
+    ${consoleRun ? html`<${Drawer} />` : chatOpen ? html`<${ChatPanel} />` : null}
     <${Toasts} />
     <${UpdateBanner} />
   </div>`;

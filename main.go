@@ -75,16 +75,22 @@ func main() {
 		fatal(err)
 	}
 	app := &App{cfg: cfg, runs: runs, projects: Projects{cfg: cfg}, secrets: newKeychainStore(), token: newToken(), home: home, version: version, build: webBuild(), started: time.Now()}
+	app.chats, err = newChatStore(*dataDir, cfg, runs, app.projects)
+	if err != nil {
+		fatal(err)
+	}
 	runs.OnFinish = func(m RunMeta) {
 		if m.Status == "succeeded" && m.InputsHash != "" && m.Project != "" {
 			_ = app.projects.RecordStamp(m.Project, m.Step, m.InputsHash)
 		}
+		app.chats.runFinished(m)
 	}
 	runs.SecretEnv = app.secretEnv
 	runs.RebuildArgv = func(spec RunSpec) ([]string, error) {
-		return agentArgv(cfg.Get(), spec.Agent, spec.Model, spec.Prompt, spec.Cwd)
+		return agentResumeArgv(cfg.Get(), spec.Agent, spec.Model, spec.Prompt, spec.Cwd, spec.Resume)
 	}
 	runs.Start()
+	app.chats.Start()
 	srv := &http.Server{Handler: app.routes(), ReadHeaderTimeout: 10 * time.Second}
 
 	go func() {

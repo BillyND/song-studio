@@ -1,5 +1,5 @@
 // One song's workspace: the eight-step workflow with script and agent actions.
-import { html, useState, useEffect, useRef, api, toast, toastError, openRun, bumpRuns, go, ago, secs, bytes, media, copyText, useStore, runDuration, store, t } from "./core.js";
+import { html, useState, useEffect, useRef, api, toast, toastError, openRun, openChat, bumpRuns, go, ago, secs, bytes, media, copyText, useStore, runDuration, store, t } from "./core.js";
 import { Icon } from "./icons.js";
 import { Btn, StatusPill, Seg, Switch, Modal, Lightbox, Markdown, Empty, AgentPicker, useAgentChoice, AgentIcon, Field, PresetChips, GenrePicker } from "./ui.js";
 
@@ -41,7 +41,7 @@ export function ProjectPage({ slug, step }) {
         </div>
         <div class="hero-actions">
           <${Btn} size="sm" icon="folder" onClick=${() => api(`/api/projects/${slug}/open`, { method: "POST", body: { path: "" } }).catch(toastError)}>${t("Mở thư mục")}</${Btn}>
-          <${FreeAgentButton} slug=${slug} />
+          <${FreeAgentButton} />
           <${Btn} size="sm" icon="trash" title=${t("Xoá bài")} onClick=${() => trashProject(d, slug)} />
           <${PrimaryAction} d=${d} slug=${slug} />
         </div>
@@ -556,23 +556,9 @@ function RecentRuns({ slug, step }) {
       <td><${StatusPill} status=${r.status} /></td><td class="num muted">${runDuration(r)}</td><td class="muted small">${ago(r.created)}</td></tr>`)}</tbody></table></div>`;
 }
 
-function FreeAgentButton({ slug }) {
-  const [open, setOpen] = useState(false);
-  const ag = useAgentChoice();
-  const [prompt, setPrompt] = useState("");
-  const send = async () => {
-    try {
-      const meta = await api("/api/runs", { method: "POST", body: { target: "project", project: slug, agent: ag.agent, model: ag.model, prompt } });
-      openRun(meta.id); bumpRuns(); setOpen(false); setPrompt("");
-    } catch (e) { toastError(e); }
-  };
-  return html`<${Btn} size="sm" icon="bot" onClick=${() => setOpen(true)}>${t("Giao việc cho agent")}</${Btn}>
-    ${open && html`<${Modal} title=${t("Giao việc tự do cho agent")} onClose=${() => setOpen(false)} footer=${html`<${Btn} kind="ghost" onClick=${() => setOpen(false)}>${t("Huỷ")}</${Btn}>
-      <${Btn} kind="primary" icon="send" disabled=${!prompt.trim()} onClick=${send}>${t("Gửi")}</${Btn}>`}>
-      <div class="stack"><${AgentPicker} value=${ag.agent} onChange=${ag.setAgent} model=${ag.model} onModel=${ag.setModel} />
-        <${Field} label=${t("Việc cần làm")} hint=${t("Agent làm trong thư mục bài này và đọc skill suno-que-huong trước.")}><textarea class="textarea" rows="7" autofocus placeholder=${t("Ví dụ: đổi cảnh 07 thành ảnh chùa Bái Đính lúc bình minh rồi tạo lại ảnh đó")} value=${prompt} onInput=${(e) => setPrompt(e.target.value)}></textarea></${Field}>
-        <${PresetChips} value=${prompt} onChange=${setPrompt} /></div>
-    </${Modal}>`}`;
+// Starts a new agent chat about this song in the side panel.
+function FreeAgentButton() {
+  return html`<${Btn} size="sm" icon="bot" title=${t("Chat với agent về bài này (⌘J)")} onClick=${() => openChat(null)}>${t("Chat với agent")}</${Btn}>`;
 }
 
 function safeJSON(raw) {

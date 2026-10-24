@@ -14,6 +14,12 @@ import (
 // Permission "full" lets the agent run tools without asking (it cannot ask: there is no TTY);
 // "edits" limits it to file edits inside its working directory where the CLI supports that.
 func agentArgv(cfg Config, agent, model, prompt, cwd string) ([]string, error) {
+	return agentResumeArgv(cfg, agent, model, prompt, cwd, "")
+}
+
+// agentResumeArgv is agentArgv that continues the CLI session resume when it is set, so a chat
+// turn keeps everything said before. Each CLI looks the session up from the same cwd.
+func agentResumeArgv(cfg Config, agent, model, prompt, cwd, resume string) ([]string, error) {
 	a, ok := cfg.Agents[agent]
 	if !ok || !contains(agentNames, agent) {
 		return nil, fmt.Errorf("unknown agent %q", agent)
@@ -24,7 +30,10 @@ func agentArgv(cfg Config, agent, model, prompt, cwd string) ([]string, error) {
 	full := cfg.PermissionMode == "full"
 	switch agent {
 	case "claude":
-		argv := []string{a.Bin, "-p", prompt, "--output-format", "stream-json", "--verbose"}
+		argv := []string{a.Bin, "-p", "--output-format", "stream-json", "--verbose"}
+		if resume != "" {
+			argv = append(argv, "--resume", resume)
+		}
 		if full {
 			argv = append(argv, "--permission-mode", "bypassPermissions")
 		} else {
@@ -33,16 +42,29 @@ func agentArgv(cfg Config, agent, model, prompt, cwd string) ([]string, error) {
 		if model != "" {
 			argv = append(argv, "--model", model)
 		}
-		return argv, nil
+		// "--" ends the options: a chat message may start with "-" (a list item, a flag-like word)
+		return append(argv, "--", prompt), nil
 	case "codex":
+		// "exec resume" takes no -C or --sandbox: the run's cwd is the session's, and the
+		// sandbox goes through a config override
 		argv := []string{a.Bin, "exec", "--json", "--skip-git-repo-check", "-C", cwd}
-		if full {
+		if resume != "" {
+			argv = []string{a.Bin, "exec", "resume", "--json", "--skip-git-repo-check"}
+		}
+		switch {
+		case full:
 			argv = append(argv, "--dangerously-bypass-approvals-and-sandbox")
-		} else {
+		case resume != "":
+			argv = append(argv, "-c", `sandbox_mode="workspace-write"`)
+		default:
 			argv = append(argv, "--sandbox", "workspace-write")
 		}
 		if model != "" {
 			argv = append(argv, "-m", model)
+		}
+		argv = append(argv, "--")
+		if resume != "" {
+			argv = append(argv, resume)
 		}
 		return append(argv, prompt), nil
 	case "omp":
@@ -50,10 +72,13 @@ func agentArgv(cfg Config, agent, model, prompt, cwd string) ([]string, error) {
 			return nil, errors.New(tr("omp không có chế độ chỉ sửa file; chọn claude/codex hoặc bật Toàn quyền trong Cài đặt", "omp has no edit-only mode; pick claude/codex or turn on Full access in Settings"))
 		}
 		argv := []string{a.Bin, "-p", "--mode", "json", "--cwd", cwd}
+		if resume != "" {
+			argv = append(argv, "--resume", resume)
+		}
 		if model != "" {
 			argv = append(argv, "--model", model)
 		}
-		return append(argv, prompt), nil
+		return append(argv, "--", prompt), nil
 	}
 	return nil, fmt.Errorf("unknown agent %q", agent)
 }

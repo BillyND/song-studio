@@ -49,6 +49,8 @@ const state = {
   boot: null,
   system: null,
   consoleRun: null, // id of the run shown in the drawer
+  chatOpen: localStorageGet("chatOpen") === "1", // the agent chat panel on the right
+  chatId: localStorageGet("chatId") || null, // the conversation shown there; null starts a new one
   toasts: [],
   runsVersion: 0, // bumps whenever a run starts or ends so views can refetch
   theme: "", // the current theme, so the toggle re-renders the moment it changes
@@ -83,6 +85,17 @@ export function toast(message, kind = "ok") {
 export function toastError(err) { toast(err?.message || String(err), "bad"); }
 
 export function openRun(id) { store.set({ consoleRun: id }); }
+// openChat shows the chat panel on a conversation (or a new one when id is null). The panel and
+// the run console share the right column, so the console makes way.
+export function openChat(id = null) {
+  store.set({ chatOpen: true, chatId: id, consoleRun: null });
+  localStorageSet("chatOpen", "1");
+  localStorageSet("chatId", id || "");
+}
+export function closeChat() {
+  store.set({ chatOpen: false });
+  localStorageSet("chatOpen", "0");
+}
 export function bumpRuns() { store.set((s) => ({ runsVersion: s.runsVersion + 1 })); }
 
 // ---------- routing (hash based, no server routes needed) ----------

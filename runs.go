@@ -44,6 +44,9 @@ type RunSpec struct {
 	Secrets []string `json:"secrets,omitempty"`
 	// TimeoutSec ends a run that takes longer; 0 picks a default from the kind of run.
 	TimeoutSec int `json:"timeoutSec,omitempty"`
+	// Chat is the conversation this agent run is a turn of; Resume is the CLI session it continues.
+	Chat   string `json:"chat,omitempty"`
+	Resume string `json:"resume,omitempty"`
 }
 
 // RunMeta is the persisted, JSON-visible state of a run.
@@ -154,13 +157,20 @@ func (m *Manager) loadHistory() {
 		m.order = append(m.order, meta.ID)
 	}
 	sort.Slice(m.order, func(i, j int) bool { return m.runs[m.order[i]].meta.Created.Before(m.runs[m.order[j]].meta.Created) })
-	// keep history bounded: drop the oldest runs beyond maxHistory
-	for len(m.order) > maxHistory {
-		id := m.order[0]
-		m.order = m.order[1:]
-		delete(m.runs, id)
-		_ = os.RemoveAll(filepath.Join(m.dir, id))
+	// keep history bounded: drop the oldest runs beyond maxHistory, except turns of a saved chat
+	keep := chatRunIDs(filepath.Dir(m.dir))
+	extra := len(m.order) - maxHistory
+	kept := m.order[:0]
+	for _, id := range m.order {
+		if extra > 0 && !keep[id] {
+			extra--
+			delete(m.runs, id)
+			_ = os.RemoveAll(filepath.Join(m.dir, id))
+			continue
+		}
+		kept = append(kept, id)
 	}
+	m.order = kept
 }
 
 const maxHistory = 300

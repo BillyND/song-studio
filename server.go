@@ -44,6 +44,7 @@ func webBuild() string {
 type App struct {
 	cfg      *ConfigStore
 	runs     *Manager
+	chats    *ChatStore
 	projects Projects
 	secrets  SecretStore
 	token    string
@@ -98,6 +99,13 @@ func (a *App) routes() http.Handler {
 	mux.HandleFunc("GET /api/runs/{id}", a.getRun)
 	mux.HandleFunc("GET /api/runs/{id}/events", a.runEvents)
 	mux.HandleFunc("POST /api/runs/{id}/stop", a.stopRun)
+
+	mux.HandleFunc("GET /api/chats", a.listChats)
+	mux.HandleFunc("POST /api/chats", a.createChat)
+	mux.HandleFunc("GET /api/chats/{id}", a.getChat)
+	mux.HandleFunc("DELETE /api/chats/{id}", a.deleteChat)
+	mux.HandleFunc("POST /api/chats/{id}/messages", a.chatMessage)
+	mux.HandleFunc("DELETE /api/chats/{id}/queue/{i}", a.removeQueued)
 
 	mux.HandleFunc("GET /api/skill/tree", a.skillTree)
 	mux.HandleFunc("GET /api/skill/file", a.getSkillFile)
@@ -820,6 +828,74 @@ func (a *App) runEvents(w http.ResponseWriter, r *http.Request) {
 			flusher.Flush()
 		}
 	}
+}
+
+// ---------- chats ----------
+
+func (a *App) listChats(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, 200, a.chats.List())
+}
+
+func (a *App) createChat(w http.ResponseWriter, r *http.Request) {
+	var req ChatRequest
+	if err := decode(r, &req); err != nil {
+		failFor(w, err)
+		return
+	}
+	v, err := a.chats.Create(req)
+	if err != nil {
+		failFor(w, err)
+		return
+	}
+	writeJSON(w, 201, v)
+}
+
+func (a *App) getChat(w http.ResponseWriter, r *http.Request) {
+	v, err := a.chats.Get(r.PathValue("id"))
+	if err != nil {
+		failFor(w, err)
+		return
+	}
+	writeJSON(w, 200, v)
+}
+
+func (a *App) deleteChat(w http.ResponseWriter, r *http.Request) {
+	if err := a.chats.Delete(r.PathValue("id")); err != nil {
+		failFor(w, err)
+		return
+	}
+	writeJSON(w, 200, map[string]bool{"ok": true})
+}
+
+func (a *App) chatMessage(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Text string `json:"text"`
+		Now  bool   `json:"now"` // stop the running turn and send right away
+	}
+	if err := decode(r, &req); err != nil {
+		failFor(w, err)
+		return
+	}
+	v, err := a.chats.Send(r.PathValue("id"), req.Text, req.Now)
+	if err != nil {
+		failFor(w, err)
+		return
+	}
+	writeJSON(w, 202, v)
+}
+
+func (a *App) removeQueued(w http.ResponseWriter, r *http.Request) {
+	i, err := strconv.Atoi(r.PathValue("i"))
+	if err != nil {
+		failFor(w, os.ErrNotExist)
+		return
+	}
+	v, err := a.chats.RemoveQueued(r.PathValue("id"), i)
+	if err != nil {
+		failFor(w, err)
+		return
+	}
+	writeJSON(w, 200, v)
 }
 
 // ---------- skill ----------

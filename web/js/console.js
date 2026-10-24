@@ -1,7 +1,7 @@
 // Live run console: subscribes to a run's SSE stream and renders a readable timeline.
-import { html, useState, useEffect, useRef, useMemo, api, store, toastError, bumpRuns, runDuration, go, t, lang } from "./core.js";
+import { html, useState, useEffect, useRef, useMemo, api, store, toastError, bumpRuns, runDuration, go, t, lang, openChat } from "./core.js";
 import { Icon } from "./icons.js";
-import { Btn, StatusPill, AgentIcon, Markdown } from "./ui.js";
+import { Btn, StatusPill, AgentIcon, Markdown, ResizeHandle } from "./ui.js";
 
 const active = (s) => s === "queued" || s === "running";
 
@@ -49,7 +49,7 @@ export function useRunStream(id) {
 }
 
 // Pair tool calls with their results and merge consecutive log lines into one block.
-function groupEvents(events) {
+export function groupEvents(events) {
   const out = [];
   const byRef = new Map();
   let lastText = "";
@@ -76,7 +76,7 @@ function groupEvents(events) {
   return out;
 }
 
-function Ev({ e }) {
+export function Ev({ e }) {
   const label = (icon, name, extra) => html`<div class="ev-label"><b>${name}</b>${extra}<span class="spacer"></span>${e.ts && new Date(e.ts).toLocaleTimeString(lang === "en" ? "en-GB" : "vi-VN")}</div>`;
   switch (e.kind) {
     case "text":
@@ -148,6 +148,12 @@ function ChainBar({ group, current, follow }) {
       <${AgentIcon} agent=${r.kind === "agent" ? r.agent : "script"} /><span>${r.title}</span><${StatusPill} status=${r.status} /></button>`)}</div>`;
 }
 
+// replyTo continues a finished agent run as a chat (or reopens the chat that already does).
+export async function replyTo(id) {
+  try { const c = await api("/api/chats", { method: "POST", body: { fromRun: id } }); openChat(c.id); }
+  catch (e) { toastError(e); }
+}
+
 export function RunView({ id, compact, onClose }) {
   const { meta, events } = useRunStream(id);
   const [, tick] = useState(0);
@@ -178,6 +184,8 @@ export function RunView({ id, compact, onClose }) {
         <div class="grow"><div class="console-title">${meta.title || meta.id}</div>
           ${meta.project && html`<a class="small muted" href=${"#/p/" + encodeURIComponent(meta.project)}>${meta.project}</a>`}</div>
         ${active(meta.status) && html`<${Btn} kind="danger" size="sm" icon="stop" onClick=${stop}>${t("Dừng")}</${Btn}>`}
+        ${meta.chat ? html`<${Btn} size="sm" icon="bot" onClick=${() => openChat(meta.chat)}>${t("Mở chat")}</${Btn}>`
+          : meta.kind === "agent" && !active(meta.status) && meta.usage?.session && html`<${Btn} size="sm" icon="send" title=${t("Nói tiếp với agent trong phiên này")} onClick=${() => replyTo(id)}>${t("Trả lời")}</${Btn}>`}
         ${compact && html`<${Btn} kind="ghost" size="sm" icon="external" title=${t("Mở toàn trang")} onClick=${() => go("/runs/" + id)} />`}
         ${onClose && html`<${Btn} kind="ghost" size="sm" icon="x" title=${t("Đóng")} onClick=${onClose} />`}
       </div>
@@ -204,5 +212,5 @@ export function RunView({ id, compact, onClose }) {
 
 export function Drawer() {
   const id = store.get().consoleRun;
-  return id ? html`<aside class="drawer"><${RunView} key=${id} id=${id} compact onClose=${() => store.set({ consoleRun: null })} /></aside>` : null;
+  return id ? html`<aside class="drawer"><${ResizeHandle} /><${RunView} key=${id} id=${id} compact onClose=${() => store.set({ consoleRun: null })} /></aside>` : null;
 }

@@ -1,5 +1,5 @@
 // Shared UI pieces used by every view.
-import { html, render, useState, useEffect, useRef, useLayoutEffect, store, useStore, t } from "./core.js";
+import { html, render, useState, useEffect, useRef, useLayoutEffect, store, useStore, t, localStorageSet } from "./core.js";
 import { Icon } from "./icons.js";
 
 export const STATUS = {
@@ -59,6 +59,25 @@ export function useAgentChoice() {
   const [model, setModel] = useState("");
   useEffect(() => setAgent(def), [def]);
   return { agent, setAgent, model, setModel };
+}
+
+// ResizeHandle drags the left edge of the right column (run console or agent chat) to set its width.
+export function ResizeHandle() {
+  const down = (e) => {
+    e.preventDefault();
+    const root = document.documentElement;
+    const move = (ev) => root.style.setProperty("--drawer", Math.round(Math.max(360, Math.min(innerWidth - 520, innerWidth - ev.clientX))) + "px");
+    const up = () => {
+      removeEventListener("pointermove", move);
+      removeEventListener("pointerup", up);
+      root.classList.remove("resizing");
+      localStorageSet("drawerW", root.style.getPropertyValue("--drawer"));
+    };
+    root.classList.add("resizing");
+    addEventListener("pointermove", move);
+    addEventListener("pointerup", up);
+  };
+  return html`<div class="resize-handle" onPointerDown=${down} title=${t("Kéo để đổi độ rộng")}></div>`;
 }
 
 // Portal renders overlays straight into <body>: a fixed element inside an animated

@@ -166,6 +166,7 @@ func (a *App) index(w http.ResponseWriter, r *http.Request) {
 	b = bytes.ReplaceAll(b, []byte("{{TOKEN}}"), []byte(a.token))
 	b = bytes.ReplaceAll(b, []byte("{{VERSION}}"), []byte(a.version))
 	b = bytes.ReplaceAll(b, []byte("{{BUILD}}"), []byte(a.build))
+	b = bytes.ReplaceAll(b, []byte("{{LANG}}"), []byte(a.cfg.Get().Language))
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("Content-Security-Policy", "default-src 'self'; img-src 'self' data: blob:; media-src 'self' blob:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'")

@@ -161,7 +161,7 @@ func checkImageKey(cfg Config, provider, key string, client *http.Client) error 
 		base := "https://api.openai.com/v1"
 		if provider == "hub" {
 			if !validBaseURL(cfg.Image.BaseURL) {
-				return errors.New("địa chỉ hub ảnh không hợp lệ")
+				return errors.New("địa chỉ API ảnh (OpenAI-compatible) không hợp lệ")
 			}
 			base = strings.TrimRight(cfg.Image.BaseURL, "/")
 		}

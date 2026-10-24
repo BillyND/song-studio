@@ -30,6 +30,7 @@ type Config struct {
 	Credits        [][2]string            `json:"credits"`              // prefilled on new songs
 	ImageModel     string                 `json:"imageModel,omitempty"` // before Image existed; migrated into Image.Models["hub"]
 	Image          ImageConfig            `json:"image"`
+	Language       string                 `json:"language"` // UI language: "vi" (default) or "en"
 	Agents         map[string]AgentConfig `json:"agents"`
 	Presets        []Preset               `json:"presets"`
 }
@@ -124,6 +125,7 @@ func loadConfig(path, home string) (*ConfigStore, error) {
 		return nil, err
 	}
 	normalizeConfig(&cfg, home)
+	setUILang(cfg.Language)
 	return &ConfigStore{path: path, cfg: cfg}, nil
 }
 
@@ -155,6 +157,9 @@ func normalizeConfig(cfg *Config, home string) {
 	}
 	if len(cfg.Credits) == 0 {
 		cfg.Credits = def.Credits
+	}
+	if !slices.Contains(uiLanguages, cfg.Language) {
+		cfg.Language = "vi"
 	}
 	normalizeImage(&cfg.Image, cfg.ImageModel)
 	cfg.ImageModel = ""
@@ -198,7 +203,7 @@ func (s *ConfigStore) Get() Config {
 func (s *ConfigStore) Update(next Config, home string) (Config, error) {
 	normalizeConfig(&next, home)
 	if !validBaseURL(next.Image.BaseURL) {
-		return Config{}, errors.New("địa chỉ hub ảnh không hợp lệ: dùng https://…, hoặc http:// chỉ với 127.0.0.1 hay localhost")
+		return Config{}, errors.New("địa chỉ API ảnh (OpenAI-compatible) không hợp lệ: dùng https://…, hoặc http:// chỉ với 127.0.0.1 hay localhost")
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -206,6 +211,7 @@ func (s *ConfigStore) Update(next Config, home string) (Config, error) {
 	if err := writeJSONAtomic(s.path, s.cfg, 0o600); err != nil {
 		return Config{}, err
 	}
+	setUILang(next.Language)
 	return s.cfg, nil
 }
 

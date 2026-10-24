@@ -2,11 +2,26 @@
 import { h, render } from "/lib/preact.mjs";
 import { useState, useEffect, useRef, useMemo, useCallback, useLayoutEffect, useErrorBoundary } from "/lib/hooks.mjs";
 import htm from "/lib/htm.mjs";
+import EN_SHELL from "./i18n/en-shell.js";
+import EN_PROJECT from "./i18n/en-project.js";
 
 export const html = htm.bind(h);
 export { h, render, useState, useEffect, useRef, useMemo, useCallback, useLayoutEffect, useErrorBoundary };
 
 const token = document.querySelector('meta[name="studio-token"]')?.content || "";
+
+// ---------- language ----------
+// UI text is written in Vietnamese and passed through t(); the English dictionaries map each
+// Vietnamese string (with {name} placeholders) to its English version. The server writes the
+// chosen language into the page, and changing it in Cài đặt reloads the page.
+const EN = { ...EN_SHELL, ...EN_PROJECT };
+export const lang = document.querySelector('meta[name="studio-lang"]')?.content === "en" ? "en" : "vi";
+
+export function t(vi, params) {
+  let s = (lang === "en" && EN[vi]) || vi;
+  if (params) s = s.replace(/\{(\w+)\}/g, (m, k) => (k in params ? String(params[k]) : m));
+  return s;
+}
 
 export class ApiError extends Error {
   constructor(message, status) { super(message); this.status = status; }

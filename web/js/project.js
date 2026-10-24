@@ -486,7 +486,7 @@ function StillsStep({ d, slug, stamp, reload }) {
 function imageSource() {
   const im = store.get().boot?.config?.image;
   if (!im) return "Nguồn ảnh ở Cài đặt";
-  return `${{ hub: "Hub ảnh", openai: "OpenAI", gemini: "Google Gemini" }[im.provider] || im.provider} · ${im.models?.[im.provider] || ""}`;
+  return `${{ hub: "OpenAI-compatible", openai: "OpenAI", gemini: "Google Gemini" }[im.provider] || im.provider} · ${im.models?.[im.provider] || ""}`;
 }
 
 const SHEET_KEYS = [["orig", "Như giọng hát"], ["C", "Đô (C)"], ["D", "Rê (D)"], ["E", "Mi (E)"], ["F", "Fa (F)"], ["G", "Sol (G)"], ["A", "La (A)"], ["Bb", "Si giáng (Bb)"], ["Eb", "Mi giáng (Eb)"]];

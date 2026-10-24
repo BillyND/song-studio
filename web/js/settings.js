@@ -15,6 +15,7 @@ export function SettingsPage() {
     setBusy(true);
     try {
       const r = await api("/api/settings", { method: "PUT", body: { ...cfg, maxConcurrent: Number(cfg.maxConcurrent) } });
+      if (r.config.language !== boot.config.language) { location.reload(); return; } // every text redraws in the new language
       store.set({ boot: { ...boot, config: r.config, agents: r.agents } });
       toast("Đã lưu cài đặt");
     } catch (e) { toastError(e); } finally { setBusy(false); }
@@ -23,6 +24,11 @@ export function SettingsPage() {
   return html`<div class="page" style="max-width:860px">
     <div class="page-head"><div><div class="eyebrow">Studio</div><h1>Cài đặt</h1></div><${Btn} kind="primary" icon="save" busy=${busy} onClick=${save}>Lưu</${Btn}></div>
     <div class="stack" style="gap:18px">
+      <div class="card card-pad stack">
+        <h2>Ngôn ngữ · Language</h2>
+        <${Field} label="Ngôn ngữ giao diện · Interface language" hint="Lưu để áp dụng. Lời bài hát và ngôn ngữ hát của từng bài không đổi. · Save to apply; lyrics and each song's sung language stay as they are.">
+          <${Seg} value=${cfg.language || "vi"} onChange=${(v) => set("language", v)} options=${[{ value: "vi", label: "Tiếng Việt" }, { value: "en", label: "English" }]} /></${Field}>
+      </div>
       <${DoctorCard} />
       <div class="card card-pad stack">
         <h2>Agent</h2>
@@ -71,7 +77,7 @@ export function SettingsPage() {
 }
 
 const PROVIDERS = [
-  { value: "hub", label: "Hub ảnh", hint: "Cổng OpenAI-compatible đang dùng (aihub). Model mặc định gpt-image-2.5." },
+  { value: "hub", label: "OpenAI-compatible", hint: "Bất kỳ dịch vụ nào có API ảnh kiểu OpenAI (aihub, OpenRouter, LiteLLM…): điền địa chỉ, model và khoá. Mặc định là aihub với gpt-image-2.5." },
   { value: "openai", label: "OpenAI", hint: "Gọi thẳng OpenAI. Khoảng $0,85–1,1 cho 20 ảnh 2048×1152 chất lượng cao." },
   { value: "gemini", label: "Google Gemini", hint: "Nano Banana, khung 16:9 2K; giữ nhân vật đồng nhất tốt. Khoảng $1 cho 20 ảnh." },
 ];
@@ -97,7 +103,7 @@ function ImageCard({ image, onChange }) {
       ${image.provider !== "gemini" && html`<${Field} label="Chất lượng">
         <${Seg} value=${image.quality} onChange=${(v) => set("quality", v)} options=${[{ value: "medium", label: "Vừa" }, { value: "high", label: "Cao" }]} /></${Field}>`}
     </div>
-    ${image.provider === "hub" && html`<${Field} label="Địa chỉ hub"><input class="input mono" value=${image.baseUrl} onInput=${(e) => set("baseUrl", e.target.value)} /></${Field}>`}
+    ${image.provider === "hub" && html`<${Field} label="Địa chỉ API (base URL)" hint="Ví dụ https://api.openai.com/v1, https://openrouter.ai/api/v1"><input class="input mono" value=${image.baseUrl} onInput=${(e) => set("baseUrl", e.target.value)} /></${Field}>`}
     <${KeyRow} name=${"image." + image.provider} label=${"Khoá " + p.label} info=${info} onSecrets=${setSecrets} />
     ${image.provider === "hub" && legacy && !hubSet && html`<div class="row wrap"><span class="muted small">Có khoá cũ trong <span class="mono">~/.config/suno-que-huong/aihub.key</span>.</span>
       <${Btn} size="sm" icon="upload" onClick=${() => api("/api/secrets/import-legacy", { method: "POST" }).then((r) => { setSecrets(r.secrets); toast("Đã chuyển khoá cũ vào Keychain"); }).catch(toastError)}>Chuyển vào Keychain</${Btn}></div>`}

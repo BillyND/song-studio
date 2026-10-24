@@ -3,6 +3,9 @@ import { html, useState, useEffect, api, toast, toastError, store, useStore, t }
 import { Icon } from "./icons.js";
 import { Btn, Seg, Field } from "./ui.js";
 
+// agent steps whose model can be set apart from the agent's default
+const STEP_MODELS = [["lyrics.agent", "Soát lời"], ["style.agent", "Phối khí & Styles"], ["scenes.agent", "Lên cảnh"], ["suno.agent", "Điền form Suno"]];
+
 export function SettingsPage() {
   const boot = useStore((s) => s.boot);
   const [cfg, setCfg] = useState(null);
@@ -48,7 +51,11 @@ export function SettingsPage() {
           <div style="width:90px"><b>${n}</b><div class="small ${infos[n]?.available ? "" : "muted"}" style=${{ color: infos[n]?.available ? "var(--ok)" : "" }}>${infos[n]?.available ? infos[n].version || t("có") : t("không thấy")}</div></div>
           <div class="grow"><${Field} label=${t("Đường dẫn")}><input class="input mono" value=${cfg.agents[n]?.bin} onInput=${(e) => setAgent(n, "bin", e.target.value)} /></${Field}></div>
           <div style="width:200px"><${Field} label=${t("Model mặc định")}><input class="input" placeholder=${t("theo CLI")} value=${cfg.agents[n]?.model} onInput=${(e) => setAgent(n, "model", e.target.value)} /></${Field}></div>
+          <div class="step-models">${STEP_MODELS.map(([id, label]) => html`<${Field} label=${t(label)}>
+            <input class="input" placeholder=${t("như mặc định")} value=${cfg.agents[n]?.steps?.[id] || ""}
+              onInput=${(e) => setAgent(n, "steps", { ...(cfg.agents[n]?.steps || {}), [id]: e.target.value.trim() })} /></${Field}>`)}</div>
         </div>`)}
+        <div class="muted small">${t("Model theo bước: bước nhẹ chạy model nhanh, rẻ hơn (ví dụ sonnet). Để trống là dùng model mặc định. Model bạn chọn lúc giao việc luôn được ưu tiên.")}</div>
       </div>
       <div class="card card-pad stack">
         <h2>${t("Bài mới")}</h2>

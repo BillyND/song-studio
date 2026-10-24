@@ -267,6 +267,8 @@ video { background: #000; box-shadow: var(--shadow); }
 .resizing, .resizing * { cursor: col-resize !important; user-select: none !important; }
 
 /* agent chat panel */
+.step-models { flex-basis: 100%; display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; padding-left: 102px; }
+@media (max-width: 720px) { .step-models { padding-left: 0; } }
 .chat-bubble { position: fixed; right: 22px; bottom: 22px; z-index: 45; width: 54px; height: 54px; border-radius: 50%; border: none; cursor: pointer;
   display: grid; place-items: center; background: var(--accent-grad); color: #20101a; box-shadow: 0 14px 34px -10px rgba(255, 95, 162, 0.8), 0 4px 12px rgba(0,0,0,0.3);
   transition: transform .15s, box-shadow .15s; animation: rise .25s ease both; }
@@ -291,6 +293,8 @@ video { background: #000; box-shadow: var(--shadow); }
 .chat-suggest button { text-align: left; font: inherit; font-size: 13px; padding: 9px 12px; border-radius: var(--r-sm); border: 1px solid var(--border); background: var(--surface); color: var(--text-2); cursor: pointer; }
 .chat-suggest button:hover { border-color: var(--accent); color: var(--text); }
 .chat-turns { padding: 14px 14px 24px; display: flex; flex-direction: column; gap: 18px; }
+.older-turns { align-self: center; font: inherit; font-size: 12px; padding: 5px 12px; border-radius: 99px; border: 1px solid var(--border); background: var(--surface); color: var(--text-2); cursor: pointer; }
+.older-turns:hover { color: var(--text); border-color: var(--border-strong); }
 .turn { display: flex; flex-direction: column; gap: 10px; }
 .msg-user { display: flex; justify-content: flex-end; }
 .bubble.user { max-width: 88%; white-space: pre-wrap; border-radius: 13px 4px 13px 13px; background: var(--accent-soft); border-color: rgba(255,95,162,0.25); }

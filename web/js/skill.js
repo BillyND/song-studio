@@ -1,11 +1,12 @@
-// Skill workspace: browse and edit the skill files, or ask an agent to change them.
-import { html, useState, useEffect, useRef, api, toast, toastError, openRun, bumpRuns, ago, bytes, useStore, runDuration, t } from "./core.js";
+// Skill workspace: browse and edit the skill files; changes by an agent go through the chat.
+import { html, useState, useEffect, useRef, api, toast, toastError, openRun, openChat, bumpRuns, ago, bytes, store, useStore, runDuration, t } from "./core.js";
 import { Icon } from "./icons.js";
-import { Btn, AgentPicker, useAgentChoice, StatusPill, AgentIcon, Modal, PresetChips } from "./ui.js";
+import { Btn, StatusPill, AgentIcon, Modal } from "./ui.js";
 
 export function SkillPage() {
   const [tree, setTree] = useState(null);
   const [path, setPath] = useState("SKILL.md");
+  useEffect(() => { store.set({ skillFile: path }); return () => store.set({ skillFile: "" }); }, [path]);
   const [file, setFile] = useState(null);
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
@@ -59,7 +60,7 @@ export function SkillPage() {
           <${Btn} size="sm" kind="primary" icon="save" busy=${busy} disabled=${!dirty} onClick=${save}>${t("Lưu")}</${Btn}></div>
         <${CodeArea} value=${text} onChange=${setText} onSave=${save} />
       </div>
-      <div class="side"><${AskAgent} path=${path} /><${SkillRuns} /></div>
+      <div class="side"><${ChatHint} /><${SkillRuns} /></div>
     </div>
     ${conflict && html`<${Modal} title=${t("File đã bị sửa ở nơi khác")} onClose=${() => setConflict(false)} footer=${html`
         <${Btn} kind="ghost" onClick=${() => setConflict(false)}>${t("Giữ bản đang sửa")}</${Btn}>
@@ -89,31 +90,12 @@ function CodeArea({ value, onChange, onSave }) {
   </div>`;
 }
 
-function AskAgent({ path }) {
-  const ag = useAgentChoice();
-  const [prompt, setPrompt] = useState("");
-  const [busy, setBusy] = useState(false);
-  const send = async () => {
-    setBusy(true);
-    try {
-      const meta = await api("/api/runs", { method: "POST", body: { target: "skill", agent: ag.agent, model: ag.model, prompt } });
-      openRun(meta.id); bumpRuns(); setPrompt(""); toast(t("Agent đang sửa skill"));
-    } catch (e) { toastError(e); } finally { setBusy(false); }
-  };
-  const samples = [
-    t("Thêm profile C: bolero trữ tình 70 BPM, giọng nam, đàn guitar phím lõm"),
-    t("Rút gọn {path} cho dễ đọc, giữ nguyên các quy tắc", { path }),
-    t("Video: cho màu chữ karaoke vàng cam thay vì hồng"),
-  ];
-  return html`<div class="card card-pad stack" style="gap:12px">
-    <div class="row"><${Icon} name="bot" /><h3>${t("Nhờ agent sửa skill")}</h3></div>
-    <${AgentPicker} value=${ag.agent} onChange=${ag.setAgent} />
-    <textarea class="textarea" rows="6" placeholder=${t("Muốn skill thay đổi gì?")} value=${prompt} onInput=${(e) => setPrompt(e.target.value)}
-      onKeyDown=${(e) => (e.metaKey || e.ctrlKey) && e.key === "Enter" && prompt.trim() && send()}></textarea>
-    <${PresetChips} value=${prompt} onChange=${setPrompt} />
-    <div class="row"><span class="muted small grow"><span class="kbd">⌘↵</span> ${t("để gửi")}</span><${Btn} kind="primary" icon="send" busy=${busy} disabled=${!prompt.trim()} onClick=${send}>${t("Gửi")}</${Btn}></div>
-    <div class="stack" style="gap:6px">${samples.map((s) => html`<a class="small" style="color:var(--text-2);cursor:pointer" onClick=${() => setPrompt(s)}>→ ${s}</a>`)}</div>
-    <div class="muted small">${t("Agent làm việc ngay trong thư mục skill, theo luồng cập nhật của ak-skill-creator và chạy kiểm tra trước khi xong.")}</div>
+// Changes to the skill go through the agent chat, which knows the file open here.
+function ChatHint() {
+  return html`<div class="card card-pad stack" style="gap:10px">
+    <div class="row"><${Icon} name="bot" /><h3>${t("Sửa skill cùng agent")}</h3></div>
+    <div class="muted small">${t("Mở chat (bong bóng góc dưới hoặc ⌘J) và nói điều muốn đổi. Agent biết bạn đang mở file nào, làm ngay trong thư mục skill và chạy kiểm tra trước khi xong.")}</div>
+    <${Btn} icon="bot" onClick=${() => openChat(null)}>${t("Chat về skill")}</${Btn}>
   </div>`;
 }
 

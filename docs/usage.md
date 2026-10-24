@@ -201,6 +201,11 @@ Agent runs are headless, so they cannot ask for permission:
 - **Chỉ sửa file** maps to `acceptEdits` / `--sandbox workspace-write`; scripts will not run.
   omp has no such mode, so omp runs are refused while it is selected.
 
+Each agent step can run on its own model (Cài đặt → Coding CLI, under each agent). New configs run
+lyric review, scenes and the Suno form on `sonnet` for claude and leave the arrangement (Styles)
+on the CLI's default model; an empty field means the agent's default model, and a model picked
+when handing over a task always wins. The run console shows which model a run used.
+
 The console shows each agent's replies, thinking and tool calls with their output. omp's computer-use calls appear as **CUA** with the agent's stated intent and the exact code it ran ("Agent điền form Suno" drives Chrome through the `cua_repl` MCP server of the spawned agent, never pressing Create).
 
 Every step prompt tells the agent to read the skill first, not to ask questions (open questions

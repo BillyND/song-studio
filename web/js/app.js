@@ -99,7 +99,7 @@ function App() {
     api("/api/bootstrap").then((b) => store.set({ boot: b })).catch(toastError);
     const poll = () => api("/api/system").then((s) => store.set({ system: s })).catch(() => {});
     poll();
-    const t = setInterval(poll, 5000);
+    const t = setInterval(() => !document.hidden && poll(), 5000); // no polling while the window is hidden
     return () => clearInterval(t);
   }, []);
   let page;

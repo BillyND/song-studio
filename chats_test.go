@@ -84,6 +84,18 @@ func lastTurn(t *testing.T, s *ChatStore, m *Manager, id string) RunMeta {
 	return waitStatus(t, m, v.Turns[len(v.Turns)-1].Run, "succeeded", "failed", "stopped")
 }
 
+func waitTurns(t *testing.T, s *ChatStore, id string, n int) {
+	t.Helper()
+	deadline := time.Now().Add(10 * time.Second)
+	for time.Now().Before(deadline) {
+		if v, _ := s.Get(id); len(v.Turns) >= n {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatalf("chat %s did not reach %d turns", id, n)
+}
+
 func TestChatResumesSession(t *testing.T) {
 	s, m, bin := chatFixture(t)
 	v, err := s.Create(ChatRequest{Agent: "claude", Target: "songs", Text: "hello there"})
@@ -93,10 +105,15 @@ func TestChatResumesSession(t *testing.T) {
 	if got := lastTurn(t, s, m, v.ID); got.Status != "succeeded" || got.Chat != v.ID {
 		t.Fatalf("first turn: %+v", got)
 	}
-	if v, _ = s.Get(v.ID); v.Session != "sess-1" || v.Title != "hello there" {
+	// runFinished records the session just after the run reports success
+	deadline := time.Now().Add(5 * time.Second)
+	for v, _ = s.Get(v.ID); v.Session == "" && time.Now().Before(deadline); v, _ = s.Get(v.ID) {
+		time.Sleep(10 * time.Millisecond)
+	}
+	if v.Session != "sess-1" || v.Title != "hello there" {
 		t.Fatalf("session not recorded: %+v", v)
 	}
-	if _, err := s.Send(v.ID, "and again", false); err != nil {
+	if _, err := s.Send(v.ID, "and again", false, Where{}); err != nil {
 		t.Fatal(err)
 	}
 	lastTurn(t, s, m, v.ID)
@@ -120,17 +137,18 @@ func TestChatQueuesWhileRunning(t *testing.T) {
 	v, _ := s.Create(ChatRequest{Agent: "claude", Target: "songs", Text: "one"})
 	first := v.Turns[0].Run
 	waitStatus(t, m, first, "running")
-	s.Send(v.ID, "two", false)
-	v, _ = s.Send(v.ID, "three", false)
+	s.Send(v.ID, "two", false, Where{})
+	v, _ = s.Send(v.ID, "three", false, Where{})
 	if len(v.Queue) != 2 || len(v.Turns) != 1 {
 		t.Fatalf("messages sent during a turn must wait: %+v", v)
 	}
 	if v, _ = s.RemoveQueued(v.ID, 0); len(v.Queue) != 1 || v.Queue[0] != "three" {
 		t.Fatalf("remove queued: %+v", v.Queue)
 	}
-	s.Send(v.ID, "four", false)
+	s.Send(v.ID, "four", false, Where{})
 	os.Remove(slow)
 	waitStatus(t, m, first, "succeeded")
+	waitTurns(t, s, v.ID, 2) // runFinished sends the queue just after the first turn reports success
 	got := lastTurn(t, s, m, v.ID)
 	v, _ = s.Get(v.ID)
 	if len(v.Turns) != 2 || v.Turns[1].Text != "three\n\nfour" || len(v.Queue) != 0 || got.Resume != "sess-1" {
@@ -146,18 +164,12 @@ func TestChatStopAndSend(t *testing.T) {
 	first := v.Turns[0].Run
 	waitStatus(t, m, first, "running")
 	os.Remove(slow) // the next turn should finish
-	if _, err := s.Send(v.ID, "change of plan", true); err != nil {
+	if _, err := s.Send(v.ID, "change of plan", true, Where{}); err != nil {
 		t.Fatal(err)
 	}
 	waitStatus(t, m, first, "stopped", "succeeded")
-	deadline := time.Now().Add(10 * time.Second)
-	for {
-		if v, _ = s.Get(v.ID); len(v.Turns) == 2 || time.Now().After(deadline) {
-			break
-		}
-		time.Sleep(20 * time.Millisecond)
-	}
-	if len(v.Turns) != 2 || v.Turns[1].Text != "change of plan" {
+	waitTurns(t, s, v.ID, 2)
+	if v, _ = s.Get(v.ID); len(v.Turns) != 2 || v.Turns[1].Text != "change of plan" {
 		t.Fatalf("stop & send must start the new message: %+v", v)
 	}
 	lastTurn(t, s, m, v.ID)
@@ -180,7 +192,7 @@ func TestChatContinuesStepRun(t *testing.T) {
 	if again, _ := s.Create(ChatRequest{FromRun: step.ID}); again.ID != v.ID {
 		t.Fatal("replying to the same run twice must reopen its chat")
 	}
-	s.Send(v.ID, "shorter chorus", false)
+	s.Send(v.ID, "shorter chorus", false, Where{})
 	lastTurn(t, s, m, v.ID)
 	c := calls(t, bin)
 	last := c[len(c)-1]
@@ -197,7 +209,7 @@ func TestChatSurvivesRestart(t *testing.T) {
 	s, m, _ := chatFixture(t)
 	v, _ := s.Create(ChatRequest{Agent: "claude", Target: "songs", Text: "hi"})
 	lastTurn(t, s, m, v.ID)
-	s.Send(v.ID, "more", false) // records the first turn's session as it starts the second
+	s.Send(v.ID, "more", false, Where{}) // records the first turn's session as it starts the second
 	lastTurn(t, s, m, v.ID)
 	s2, err := newChatStore(filepath.Dir(m.dir), s.cfg, m, s.projects)
 	if err != nil {
@@ -236,7 +248,7 @@ func TestChatMessageStartingWithDash(t *testing.T) {
 	s, m, bin := chatFixture(t)
 	v, _ := s.Create(ChatRequest{Agent: "claude", Target: "songs", Text: "hi"})
 	lastTurn(t, s, m, v.ID)
-	s.Send(v.ID, "- shorter chorus\n- slower", false)
+	s.Send(v.ID, "- shorter chorus\n- slower", false, Where{})
 	if got := lastTurn(t, s, m, v.ID); got.Status != "succeeded" {
 		t.Fatalf("a message that starts with a dash must reach the agent as the prompt: %+v", got)
 	}
@@ -266,7 +278,7 @@ func TestChatSaveFailureKeepsStoreUsable(t *testing.T) {
 	lastTurn(t, s, m, v.ID)
 	os.Chmod(s.dir, 0o500) // saving now fails, after the turn is submitted
 	defer os.Chmod(s.dir, 0o755)
-	if _, err := s.Send(v.ID, "again", false); err == nil {
+	if _, err := s.Send(v.ID, "again", false, Where{}); err == nil {
 		t.Fatal("a failed save must be reported")
 	}
 	done := make(chan struct{})
@@ -280,4 +292,35 @@ func TestChatSaveFailureKeepsStoreUsable(t *testing.T) {
 		t.Fatalf("the submitted turn must stay recorded: %+v", got.Turns)
 	}
 	lastTurn(t, s, m, v.ID)
+}
+
+func TestChatTellsTheAgentWhereTheUserIs(t *testing.T) {
+	s, m, bin := chatFixture(t)
+	songs := s.cfg.Get().ProjectsDir
+	os.MkdirAll(filepath.Join(songs, "hue"), 0o755)
+	os.WriteFile(filepath.Join(songs, "hue", "project.json"), []byte(`{"title":"Huế","subtitle":"Mộng Mơ"}`), 0o644)
+	at := Where{Page: "project", Project: "hue", Step: "suno"}
+	v, err := s.Create(ChatRequest{Agent: "claude", Target: "songs", Text: "shorten this chorus", Where: at})
+	if err != nil {
+		t.Fatal(err)
+	}
+	lastTurn(t, s, m, v.ID)
+	s.Send(v.ID, "and the verse", false, at) // same screen: no note again
+	lastTurn(t, s, m, v.ID)
+	s.Send(v.ID, "now this one", false, Where{Page: "skill", File: "references/style-profiles.md"})
+	lastTurn(t, s, m, v.ID)
+	c := calls(t, bin)
+	first, second, third := c[0][len(c[0])-1], c[1][len(c[1])-1], c[2][len(c[2])-1]
+	if !strings.Contains(first, `"Huế Mộng Mơ"`) || !strings.Contains(first, filepath.Join(songs, "hue")) || !strings.Contains(first, "Prompt Suno") {
+		t.Fatalf("the first turn must name the song, its folder and step: %q", first)
+	}
+	if second != "and the verse" {
+		t.Fatalf("an unchanged screen must not be repeated: %q", second)
+	}
+	if !strings.Contains(third, "references/style-profiles.md") || !strings.HasSuffix(third, "now this one") {
+		t.Fatalf("a new screen must be named: %q", third)
+	}
+	if got, _ := s.Get(v.ID); got.Turns[2].Text != "now this one" {
+		t.Fatalf("the chat shows what the user wrote, not the note: %q", got.Turns[2].Text)
+	}
 }

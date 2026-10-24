@@ -1,5 +1,5 @@
 // Live run console: subscribes to a run's SSE stream and renders a readable timeline.
-import { html, useState, useEffect, useRef, useMemo, api, store, toastError, bumpRuns, runDuration, go, t, lang, openChat } from "./core.js";
+import { html, useState, useEffect, useRef, useMemo, api, store, toastError, bumpRuns, runDuration, go, t, lang, openChat, where } from "./core.js";
 import { Icon } from "./icons.js";
 import { Btn, StatusPill, AgentIcon, Markdown, ResizeHandle } from "./ui.js";
 
@@ -128,9 +128,14 @@ function ChainBar({ group, current, follow }) {
     setChain([]);
     if (!group) return;
     let stop = false;
-    const load = () => api(`/api/groups/${encodeURIComponent(group)}`).then((c) => !stop && setChain(c)).catch(() => {});
+    // poll while some link of the chain can still change; a finished chain is final
+    const load = () => api(`/api/groups/${encodeURIComponent(group)}`).then((c) => {
+      if (stop) return;
+      setChain(c);
+      if (!c.some((r) => active(r.status))) clearInterval(t);
+    }).catch(() => {});
+    const t = setInterval(() => !document.hidden && load(), 2000);
     load();
-    const t = setInterval(load, 2000);
     return () => { stop = true; clearInterval(t); };
   }, [group]);
   useEffect(() => {
@@ -150,7 +155,7 @@ function ChainBar({ group, current, follow }) {
 
 // replyTo continues a finished agent run as a chat (or reopens the chat that already does).
 export async function replyTo(id) {
-  try { const c = await api("/api/chats", { method: "POST", body: { fromRun: id } }); openChat(c.id); }
+  try { const c = await api("/api/chats", { method: "POST", body: { fromRun: id, where: where() } }); openChat(c.id); }
   catch (e) { toastError(e); }
 }
 

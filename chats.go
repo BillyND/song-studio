@@ -30,10 +30,23 @@ type Chat struct {
 	Turns  []ChatTurn `json:"turns"`
 	// Queue holds messages sent while a turn was running; they go out together when it ends.
 	Queue []string `json:"queue"`
+	// Where is the screen the user was on when they last wrote; SentWhere the one the agent was
+	// last told about, so a turn only mentions the screen when it changed.
+	Where     Where `json:"where"`
+	SentWhere Where `json:"sentWhere"`
 	// Error says why the queue could not go out on its own (when a turn ended or at startup).
 	Error   string    `json:"error,omitempty"`
 	Created time.Time `json:"created"`
 	Updated time.Time `json:"updated"`
+}
+
+// Where is the studio screen the user is looking at: a page and what is open on it.
+type Where struct {
+	Page    string `json:"page,omitempty"` // songs, project, skill, runs, settings
+	Project string `json:"project,omitempty"`
+	Step    string `json:"step,omitempty"`
+	File    string `json:"file,omitempty"` // the skill file open on the Skill page
+	Run     string `json:"run,omitempty"`
 }
 
 // ChatTurn pairs what the user wrote with the run that answered it. A chat continued from a
@@ -156,6 +169,7 @@ type ChatRequest struct {
 	Project string `json:"project"`
 	Text    string `json:"text"`
 	FromRun string `json:"fromRun"`
+	Where   Where  `json:"where"`
 }
 
 // Create starts a chat and sends its first message, if any. Continuing a run that a chat
@@ -228,6 +242,7 @@ func (s *ChatStore) Create(req ChatRequest) (ChatView, error) {
 	if c.Title == "" {
 		c.Title = tr("Cuộc trò chuyện mới", "New chat")
 	}
+	c.Where = req.Where
 	if text := strings.TrimSpace(req.Text); text != "" && req.FromRun == "" {
 		c.Queue = append(c.Queue, text)
 		sent, err := s.drain(c)
@@ -246,12 +261,12 @@ func (s *ChatStore) Create(req ChatRequest) (ChatView, error) {
 
 // Send adds a message. With no turn running it goes out now; otherwise it waits in the queue,
 // and now stops the running turn so the queue goes out as soon as that turn ends.
-func (s *ChatStore) Send(id, text string, now bool) (ChatView, error) {
+func (s *ChatStore) Send(id, text string, now bool, where Where) (ChatView, error) {
 	text = strings.TrimSpace(text)
 	if text == "" {
 		return ChatView{}, errors.New(tr("tin nhắn trống", "the message is empty"))
 	}
-	v, running, err := s.enqueue(id, text)
+	v, running, err := s.enqueue(id, text, where)
 	if err != nil || running == "" || !now {
 		return v, err
 	}
@@ -265,7 +280,7 @@ func (s *ChatStore) Send(id, text string, now bool) (ChatView, error) {
 
 // enqueue adds a message and sends the queue when no turn is running. It returns the turn
 // still running, if any.
-func (s *ChatStore) enqueue(id, text string) (ChatView, string, error) {
+func (s *ChatStore) enqueue(id, text string, where Where) (ChatView, string, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	c, ok := s.chats[id]
@@ -273,6 +288,7 @@ func (s *ChatStore) enqueue(id, text string) (ChatView, string, error) {
 		return ChatView{}, "", os.ErrNotExist
 	}
 	c.Queue = append(c.Queue, text)
+	c.Where = where
 	running := s.runningTurn(c)
 	if running != "" {
 		return s.view(c), running, s.save(c)
@@ -386,6 +402,7 @@ func (s *ChatStore) drain(c *Chat) (sent bool, err error) {
 		return false, nil
 	}
 	text := strings.Join(c.Queue, "\n\n")
+	shown := text // what the user wrote; the agent also gets the screen note
 	cfg := s.cfg.Get()
 	if n := len(c.Turns); n > 0 {
 		if r, ok := s.runs.Get(c.Turns[n-1].Run); ok {
@@ -401,6 +418,9 @@ func (s *ChatStore) drain(c *Chat) (sent bool, err error) {
 			}
 		}
 	}
+	if note := s.whereNote(c.Where); note != "" && c.Where != c.SentWhere {
+		text = note + "\n\n" + text
+	}
 	prompt := text
 	switch {
 	case c.Session == "":
@@ -414,7 +434,7 @@ func (s *ChatStore) drain(c *Chat) (sent bool, err error) {
 	if err != nil {
 		return false, err
 	}
-	meta, err := s.runs.Submit(RunSpec{Kind: "agent", Title: firstLine(text, 60), Project: c.Project, Cwd: c.Cwd,
+	meta, err := s.runs.Submit(RunSpec{Kind: "agent", Title: firstLine(shown, 60), Project: c.Project, Cwd: c.Cwd,
 		Agent: c.Agent, Model: c.Model, Prompt: prompt, Argv: argv, Chat: c.ID, Resume: c.Session})
 	if err != nil {
 		return false, err
@@ -422,8 +442,52 @@ func (s *ChatStore) drain(c *Chat) (sent bool, err error) {
 	c.Primed = true
 	c.Queue = []string{}
 	c.Error = ""
-	c.Turns = append(c.Turns, ChatTurn{Run: meta.ID, Text: text})
+	c.SentWhere = c.Where
+	c.Turns = append(c.Turns, ChatTurn{Run: meta.ID, Text: shown})
 	return true, s.save(c)
+}
+
+// whereNote tells the agent which screen the user is on, so "this song" or "this file" in a
+// message has a referent. Anything that does not resolve is left out.
+func (s *ChatStore) whereNote(w Where) string {
+	var on string
+	switch w.Page {
+	case "project":
+		dir, err := s.projects.dir(w.Project)
+		if err != nil {
+			return ""
+		}
+		title := w.Project
+		for _, p := range s.projects.List() {
+			if p.Slug == w.Project {
+				title = strings.TrimSpace(p.Title + " " + p.Subtitle)
+			}
+		}
+		on = fmt.Sprintf(tr("bài \"%s\" (thư mục %s)", "the song \"%s\" (folder %s)"), title, dir)
+		for _, st := range stepList() {
+			if st.ID == w.Step {
+				on += fmt.Sprintf(tr(", bước \"%s\"", ", step \"%s\""), st.Title)
+			}
+		}
+	case "skill":
+		on = fmt.Sprintf(tr("trang Skill (%s)", "the Skill page (%s)"), s.cfg.Get().SkillDir)
+		if f := filepath.Clean(w.File); w.File != "" && filepath.IsLocal(f) {
+			on += fmt.Sprintf(tr(", đang mở file %s", ", with the file %s open"), f)
+		}
+	case "runs":
+		on = tr("trang Lượt chạy", "the Runs page")
+		if r, ok := s.runs.Get(w.Run); ok {
+			m := r.snapshot()
+			on += fmt.Sprintf(tr(", lượt \"%s\" (%s; nhật ký ở %s)", ", the run \"%s\" (%s; its log is in %s)"), m.Title, m.Status, filepath.Join(s.runs.dir, m.ID))
+		}
+	case "settings":
+		on = tr("trang Cài đặt", "the Settings page")
+	case "songs":
+		on = tr("danh sách bài hát", "the song list")
+	default:
+		return ""
+	}
+	return tr("[Màn hình người dùng đang xem: ", "[Screen the user is on: ") + on + "]"
 }
 
 // chatHeader briefs the agent at the start of a chat session about where it works.

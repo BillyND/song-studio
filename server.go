@@ -526,12 +526,13 @@ func (a *App) projectAction(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		spec.Cwd = d.Dir
-		argv, err := agentArgv(cfg, agent, req.Model, prompt, spec.Cwd)
+		model := stepModel(cfg, agent, action, req.Model)
+		argv, err := agentArgv(cfg, agent, model, prompt, spec.Cwd)
 		if err != nil {
 			failFor(w, err)
 			return
 		}
-		spec.Agent, spec.Model, spec.Prompt, spec.Argv, spec.Title = agent, req.Model, prompt, argv, act.Label
+		spec.Agent, spec.Model, spec.Prompt, spec.Argv, spec.Title = agent, model, prompt, argv, act.Label
 	} else {
 		argv, title, err := scriptArgv(action, cfg.SkillDir, d.Dir, req, d)
 		if err != nil {
@@ -869,14 +870,15 @@ func (a *App) deleteChat(w http.ResponseWriter, r *http.Request) {
 
 func (a *App) chatMessage(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		Text string `json:"text"`
-		Now  bool   `json:"now"` // stop the running turn and send right away
+		Text  string `json:"text"`
+		Now   bool   `json:"now"`   // stop the running turn and send right away
+		Where Where  `json:"where"` // the screen the user is on
 	}
 	if err := decode(r, &req); err != nil {
 		failFor(w, err)
 		return
 	}
-	v, err := a.chats.Send(r.PathValue("id"), req.Text, req.Now)
+	v, err := a.chats.Send(r.PathValue("id"), req.Text, req.Now, req.Where)
 	if err != nil {
 		failFor(w, err)
 		return

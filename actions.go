@@ -220,11 +220,12 @@ func pipelineSpecs(name string, cfg Config, d ProjectDetail, req ActionRequest) 
 	}
 	addAgent := func(id string, prompt string, after []int) error {
 		act := findAction(id)
-		argv, err := agentArgv(cfg, agent, req.Model, prompt, d.Dir)
+		model := stepModel(cfg, agent, id, req.Model)
+		argv, err := agentArgv(cfg, agent, model, prompt, d.Dir)
 		if err != nil {
 			return err
 		}
-		specs = append(specs, RunSpec{Kind: "agent", Step: act.Step, Project: d.Slug, Cwd: d.Dir, Agent: agent, Model: req.Model, Prompt: prompt, Argv: argv, Title: act.Label})
+		specs = append(specs, RunSpec{Kind: "agent", Step: act.Step, Project: d.Slug, Cwd: d.Dir, Agent: agent, Model: model, Prompt: prompt, Argv: argv, Title: act.Label})
 		deps = append(deps, after)
 		return nil
 	}

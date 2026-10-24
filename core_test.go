@@ -816,3 +816,37 @@ func TestSheetStepAndAction(t *testing.T) {
 		}
 	}
 }
+
+func TestStepModels(t *testing.T) {
+	home := t.TempDir()
+	path := filepath.Join(home, "c.json")
+	cs, _ := loadConfig(path, home)
+	cfg := cs.Get()
+	if got := stepModel(cfg, "claude", "lyrics.agent", ""); got != "sonnet" {
+		t.Fatalf("lyrics review should default to sonnet, got %q", got)
+	}
+	if got := stepModel(cfg, "claude", "style.agent", ""); got != "" {
+		t.Fatalf("the arrangement keeps the CLI default, got %q", got)
+	}
+	if got := stepModel(cfg, "claude", "lyrics.agent", "opus"); got != "opus" {
+		t.Fatalf("a model picked for the run must win, got %q", got)
+	}
+	// a user who cleared the step models keeps them cleared after a reload
+	a := cfg.Agents["claude"]
+	a.Steps = map[string]string{}
+	cfg.Agents["claude"] = a
+	os.WriteFile(path, mustJSON(t, cfg), 0o644)
+	cs2, _ := loadConfig(path, home)
+	if got := stepModel(cs2.Get(), "claude", "lyrics.agent", ""); got != "" {
+		t.Fatalf("cleared step models came back: %q", got)
+	}
+}
+
+func mustJSON(t *testing.T, v any) []byte {
+	t.Helper()
+	b, err := json.Marshal(v)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return b
+}

@@ -271,9 +271,9 @@ func (p Projects) Detail(slug string, active map[string]string) (ProjectDetail, 
 	return d, nil
 }
 
-func deriveSteps(dir string, pc projectConfig, d ProjectDetail, active map[string]string) []Step {
-	mt := func(rel string) time.Time { return mtime(filepath.Join(dir, rel)) }
-	steps := []Step{
+// stepList is the eight steps of a song, in order, without their state.
+func stepList() []Step {
+	return []Step{
 		{ID: "lyrics", Title: tr("Lời, bài mẫu & yêu cầu", "Lyrics, references & brief")},
 		{ID: "suno", Title: tr("Prompt Suno", "Suno prompt")},
 		{ID: "audio", Title: tr("Nhạc từ Suno", "Suno audio")},
@@ -283,6 +283,11 @@ func deriveSteps(dir string, pc projectConfig, d ProjectDetail, active map[strin
 		{ID: "render", Title: tr("Xuất video karaoke", "Render karaoke video")},
 		{ID: "sheet", Title: tr("Bản nhạc", "Sheet music")},
 	}
+}
+
+func deriveSteps(dir string, pc projectConfig, d ProjectDetail, active map[string]string) []Step {
+	mt := func(rel string) time.Time { return mtime(filepath.Join(dir, rel)) }
+	steps := stepList()
 	set := func(id, status, detail string) {
 		for i := range steps {
 			if steps[i].ID == id {

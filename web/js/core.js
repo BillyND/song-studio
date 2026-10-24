@@ -51,6 +51,7 @@ const state = {
   consoleRun: null, // id of the run shown in the drawer
   chatOpen: localStorageGet("chatOpen") === "1", // the agent chat panel on the right
   chatId: localStorageGet("chatId") || null, // the conversation shown there; null starts a new one
+  skillFile: "", // the file open on the Skill page, for the chat's sense of where the user is
   toasts: [],
   runsVersion: 0, // bumps whenever a run starts or ends so views can refetch
   theme: "", // the current theme, so the toggle re-renders the moment it changes
@@ -91,6 +92,18 @@ export function openChat(id = null) {
   store.set({ chatOpen: true, chatId: id, consoleRun: null });
   localStorageSet("chatOpen", "1");
   localStorageSet("chatId", id || "");
+}
+// where tells the chat agent which screen the user is on (sent with every message; the server
+// only mentions it to the agent when it changed).
+export function where() {
+  const r = (location.hash || "#/").replace(/^#/, "").split("/").filter(Boolean).map(decodeURIComponent);
+  switch (r[0]) {
+    case "p": return { page: "project", project: r[1], step: r[2] || "" };
+    case "skill": return { page: "skill", file: state.skillFile || "" };
+    case "runs": return { page: "runs", run: r[1] || state.consoleRun || "" };
+    case "settings": return { page: "settings" };
+    default: return { page: "songs" };
+  }
 }
 export function closeChat() {
   store.set({ chatOpen: false });

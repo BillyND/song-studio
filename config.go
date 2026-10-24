@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"errors"
+	"maps"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -16,6 +17,23 @@ import (
 type AgentConfig struct {
 	Bin   string `json:"bin"`
 	Model string `json:"model"`
+	// Steps picks a model per agent step ("lyrics.agent" → "sonnet"); a step left out uses Model.
+	// Never omitted, so a user who clears every entry is not handed the defaults again.
+	Steps map[string]string `json:"steps"`
+}
+
+// defaultStepModels runs the lighter steps on a faster, cheaper Claude model and leaves the
+// arrangement (Styles), which needs the most judgment, on the CLI's default model.
+var defaultStepModels = map[string]map[string]string{
+	"claude": {"lyrics.agent": "sonnet", "scenes.agent": "sonnet", "suno.agent": "sonnet"},
+}
+
+// stepModel is the model an agent step runs on: the one picked for this run, else the step's.
+func stepModel(cfg Config, agent, action, chosen string) string {
+	if chosen != "" {
+		return chosen
+	}
+	return cfg.Agents[agent].Steps[action]
 }
 
 // Config is persisted at ~/.config/que-huong-studio/config.json.
@@ -194,6 +212,15 @@ func normalizeConfig(cfg *Config, home string) {
 	cfg.ImageModel = ""
 	if cfg.Agents == nil {
 		cfg.Agents = map[string]AgentConfig{}
+	}
+	for name, a := range cfg.Agents {
+		if a.Steps == nil {
+			a.Steps = maps.Clone(defaultStepModels[name])
+			if a.Steps == nil {
+				a.Steps = map[string]string{}
+			}
+			cfg.Agents[name] = a
+		}
 	}
 	if cfg.Presets == nil {
 		cfg.Presets = slices.Clone(defaultPresets[cfg.Language])

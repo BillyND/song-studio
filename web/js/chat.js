@@ -1,11 +1,12 @@
 // Agent chat panel: multi-turn conversations with a coding agent, docked on the right of every
 // page. Each message is an agent run that resumes the session of the turn before it.
-import { html, useState, useEffect, useRef, useMemo, useLayoutEffect, api, store, useStore, useRoute, toastError, bumpRuns, t, ago, runDuration, openChat, closeChat, openRun } from "./core.js";
+import { html, useState, useEffect, useRef, useMemo, useLayoutEffect, api, store, useStore, useRoute, toastError, bumpRuns, t, ago, runDuration, openChat, closeChat, openRun, where } from "./core.js";
 import { Icon } from "./icons.js";
 import { Btn, StatusPill, AgentIcon, AgentPicker, useAgentChoice, PresetChips, ResizeHandle } from "./ui.js";
 import { useRunStream, groupEvents, Ev } from "./console.js";
 
 const active = (s) => s === "queued" || s === "running";
+const RECENT_TURNS = 8;
 
 // Song titles for context chips, fetched once per page load.
 let titlesCache = null;
@@ -69,7 +70,7 @@ function NewChat() {
     if (!text.trim() || busy) return;
     setBusy(true);
     try {
-      const c = await api("/api/chats", { method: "POST", body: { ...ctx, agent: ag.agent, model: ag.model, text } });
+      const c = await api("/api/chats", { method: "POST", body: { ...ctx, agent: ag.agent, model: ag.model, text, where: where() } });
       setText(""); bumpRuns(); openChat(c.id);
     } catch (e) { toastError(e); } finally { setBusy(false); }
   };
@@ -77,7 +78,7 @@ function NewChat() {
     <div class="chat-scroll"><div class="chat-intro">
       <div class="chat-hello"><span class="chat-mark big"><${Icon} name="sparkles" size=${20} /></span>
         <h3>${t("Trò chuyện với agent")}</h3>
-        <p class="muted small">${t("Agent làm trong thư mục bên dưới, nhớ cả cuộc trò chuyện và có thể hỏi lại khi chưa rõ. Bạn nhắn tiếp được cả khi nó đang làm.")}</p></div>
+        <p class="muted small">${t("Agent làm trong thư mục bên dưới, nhớ cả cuộc trò chuyện và có thể hỏi lại khi chưa rõ. Nó biết bạn đang mở màn nào, nên cứ nói \"bài này\", \"file này\".")}</p></div>
       <div class="chat-field"><span class="small muted">${t("Làm việc với")}</span>
         <${ContextChip} ctx=${ctx} onRemove=${ctx.target !== "songs" ? () => setDropped(true) : null} /></div>
       <div class="chat-field"><span class="small muted">Agent</span><${AgentPicker} value=${ag.agent} onChange=${ag.setAgent} model=${ag.model} onModel=${ag.setModel} /></div>
@@ -92,6 +93,7 @@ function Thread({ id }) {
   const [chat, setChat] = useState(null);
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
+  const [showAll, setShowAll] = useState(false);
   const box = useRef(null);
   const inner = useRef(null);
   const stick = useRef(true);
@@ -105,9 +107,18 @@ function Thread({ id }) {
       });
     };
     load();
-    const iv = setInterval(load, 2000);
+    // quick while a turn runs or messages wait, slow otherwise (another window may still add a turn)
+    let idle = 0;
+    const iv = setInterval(() => {
+      if (document.hidden) return;
+      const c = latest.current;
+      if (c && !active(c.status) && !c.queue.length && ++idle % 8) return;
+      load();
+    }, 2000);
     return () => { stop = true; clearInterval(iv); };
   }, [id]);
+  const latest = useRef(null);
+  latest.current = chat;
   useLayoutEffect(() => {
     // keep the newest output in view while the user has not scrolled up
     const el = box.current, content = inner.current;
@@ -118,6 +129,8 @@ function Thread({ id }) {
   }, [!!chat]);
   if (!chat) return html`<div class="empty"><${Icon} name="loader" class="spin" size=${22} /></div>`;
   const running = active(chat.status);
+  // older turns stay unloaded (no stream, no events in memory) until asked for
+  const hidden = showAll ? 0 : Math.max(0, chat.turns.length - RECENT_TURNS);
   const last = chat.turns[chat.turns.length - 1];
   const send = async (now) => {
     const msg = text.trim();
@@ -125,7 +138,7 @@ function Thread({ id }) {
     setBusy(true);
     try {
       ++ver.current;
-      const c = await api(`/api/chats/${encodeURIComponent(id)}/messages`, { method: "POST", body: { text: msg, now } });
+      const c = await api(`/api/chats/${encodeURIComponent(id)}/messages`, { method: "POST", body: { text: msg, now, where: where() } });
       ++ver.current;
       setChat(c);
       setText(""); stick.current = true; bumpRuns();
@@ -140,7 +153,9 @@ function Thread({ id }) {
         <span class="spacer"></span>${running && html`<${Btn} kind="ghost" size="sm" icon="stop" onClick=${stopTurn}>${t("Dừng")}</${Btn}>`}</div>
     </div>
     <div class="chat-scroll" ref=${box} onScroll=${(e) => { const el = e.currentTarget; stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 60; }}>
-      <div class="chat-turns" ref=${inner}>${chat.turns.map((tn) => html`<${Turn} key=${tn.run} turn=${tn} />`)}</div>
+      <div class="chat-turns" ref=${inner}>
+        ${hidden > 0 && html`<button type="button" class="older-turns" onClick=${() => setShowAll(true)}>${t("Hiện {n} lượt trước", { n: hidden })}</button>`}
+        ${chat.turns.slice(hidden).map((tn) => html`<${Turn} key=${tn.run} turn=${tn} />`)}</div>
     </div>
     ${chat.queue.length > 0 && html`<div class="chat-queue">
       ${chat.error && !running ? html`<div class="small queue-err"><${Icon} name="alert" size=${12} /> ${t("Chưa gửi được: {error}. Gửi thêm một tin để thử lại, hoặc bỏ các tin này.", { error: chat.error })}</div>`

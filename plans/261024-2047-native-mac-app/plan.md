@@ -1,6 +1,6 @@
 # Native macOS app with auto-update
 
-Status: in progress (2026-10-24). Decision: Swift shell + existing Go server; Sparkle 2.10 for updates; releases in a separate public repo `BillyND/que-huong-studio-releases` (source stays private). Unsigned (ad-hoc), friends-only.
+Status: done (2026-10-24); verified 1.0.8 → 1.0.9 auto-update with relaunch. Decision: Swift shell + existing Go server; Sparkle 2.10 for updates; releases in a separate public repo `BillyND/que-huong-studio-releases` (source stays private). Unsigned (ad-hoc), friends-only.
 
 ## Outcome
 Opening "Quê Hương Studio" shows its own window (no browser). When a new version is released, every installed copy finds it, installs it and relaunches into it.
@@ -27,3 +27,12 @@ App Store, Developer ID notarization, Windows/Linux, delta updates, in-app notif
 3. Packaging: Info.plist template, Makefile `app`, `install`, `release`; Sparkle tools and keys.
 4. Releases repo; release 1.0.1, install, release 1.0.2, verify auto-update end to end.
 5. Docs.
+
+## Findings
+- Ad-hoc signatures differ per build, so Sparkle logged "Code signature of the new version doesn't
+  match" and installed without relaunching. Fixed with a self-signed identity (stable designated
+  requirement `certificate root = H"6c61…"`).
+- Sparkle asks the app to quit from inside a main-queue block; a `.terminateLater` reply queued on
+  the main queue deadlocked. Quit now stops the server synchronously and answers `.terminateNow`.
+- zsh's `log` builtin shadows `/usr/bin/log`; use the full path to read Sparkle's os_log.
+- A 1-byte change to a release zip fails `sign_update --verify` with the studio key.

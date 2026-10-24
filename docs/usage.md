@@ -1,33 +1,72 @@
 # Quê Hương Studio
 
-Local web workspace for the `suno-que-huong` skill. Each song goes through eight steps, from
-lyrics to a 1080p karaoke video. Every step either runs one of the skill's scripts directly or
-hands the work to a coding agent (Claude Code, omp or Codex), and the studio shows the agent's
-work live: its replies, thinking, each tool call with its output, cost and duration.
+A Mac app for the `suno-que-huong` skill. Each song goes through nine steps, from lyrics to a
+song, a 1080p karaoke video and a lead sheet. Every step either runs one of the skill's scripts
+directly or hands the work to a coding agent (Claude Code, omp or Codex), and the studio shows the
+agent's work live: its replies, thinking, each tool call with its output, cost and duration.
+
+The app is a Swift window (`macapp/`, WKWebView) around the Go server (`que-huong-studio`, bundled
+inside the app), which still serves the UI on `127.0.0.1:4317` only. Apple Silicon, macOS 13+.
 
 ## Install and open
 
+For friends: download the newest `QueHuongStudio-<version>.zip` from
+<https://github.com/BillyND/que-huong-studio-releases/releases>, unzip, drag the app to
+Applications, open it, and the first time allow it under System Settings → Privacy & Security →
+"Open Anyway" (the app is not signed by Apple). The releases repo README says the same in Vietnamese.
+
+From source:
+
 ```bash
 cd ~/Coding/Personal/que-huong-studio
-make install        # tests, builds, installs ~/.local/bin/que-huong-studio and ~/Applications/Quê Hương Studio.app
+make install        # tests, builds out/Quê Hương Studio.app, installs it to ~/Applications
+                    # and links ~/.local/bin/que-huong-studio to the bundled server
 ```
 
-Open **Quê Hương Studio** from Spotlight or the Dock (ready in about a second), or run
-`que-huong-studio` in a terminal. A second launch only brings the open studio to the front.
-Stop it with the ■ button at the bottom of the sidebar, or Ctrl-C in the terminal; running jobs
-are stopped first.
+Opening the app starts its own server. A studio already on port 4317 (a terminal run or an older
+app) is asked to quit first. Closing the window or Cmd+Q stops the server cleanly (queued work is
+kept); the ■ button in the sidebar does the same. Finder gives apps no PATH, so the app reads the
+login shell's PATH (Homebrew, uv, nvm, `~/.local/bin`) when it starts.
 
-Re-run `make install` from a normal terminal after changing PATH (new Homebrew, nvm or uv
-location): the app bakes in the installing shell's PATH because Finder starts apps without one.
+The window behaves like a browser for the studio: Vietnamese menus with the Edit shortcuts
+(Cmd+C/V/X/A/Z), Cmd+R reload, zoom, `confirm()` dialogs, file pickers and drag-and-drop,
+downloads to `~/Downloads`, and links outside the studio open in the default browser. Trợ giúp →
+"Mở trong trình duyệt" opens the same studio in a browser.
+
+## Updates
+
+Sparkle 2.10 checks <https://github.com/BillyND/que-huong-studio-releases/releases/latest/download/appcast.xml>
+every hour (and on Quê Hương Studio → Kiểm tra cập nhật…), downloads in the background, verifies
+the EdDSA signature, and installs on quit or when the user clicks "Cài đặt cập nhật". Before
+relaunching it waits until no job is queued or running. Each release also carries a snapshot of
+the skill; on start the server installs it into `~/.claude/skills/suno-que-huong` when it is new,
+backing up local edits to `~/.local/share/que-huong-studio/skill-backups/` first.
+
+Publishing a version (only from the Mac that holds the two keys below):
+
+```bash
+echo 1.2.0 > VERSION
+NOTES="- what changed" make release   # build, sign, zip, sign the zip, upload zip + appcast.xml
+```
+
+Two secrets in the login keychain make releases trustworthy; back both up (Keychain Access →
+export), or installed apps can never be updated again:
+
+| Keychain item | Made by | Purpose |
+|---|---|---|
+| Sparkle EdDSA key, account `que-huong-studio` | `packaging/sparkle-tools/bin/generate_keys --account que-huong-studio` | signs each zip; the public half is `packaging/sparkle-public-key.txt` and goes into Info.plist |
+| Code signing identity "Que Huong Studio Signing" (self-signed) | `packaging/make-signing-cert.sh` | signs the app; Sparkle only installs an update signed like the installed app, and ad-hoc signatures change with every build |
 
 | Command | What it does |
 |---|---|
-| `make build` | `bin/que-huong-studio` (about 5 s cold, under 1 s warm) |
+| `make build` | the Go server alone, `bin/que-huong-studio` |
+| `make app` | `out/Quê Hương Studio.app` |
 | `make test` | gofmt, `go vet`, Go tests |
-| `make run` | build and start in the terminal |
-| `make uninstall` | remove the binary and the app |
+| `make run` | build the server and start it in a terminal |
+| `make release` | publish `VERSION` to the releases repo |
+| `make uninstall` | remove the app and the link |
 
-Flags: `-addr 127.0.0.1:4317`, `-no-open`, `-config`, `-data`, `-version`.
+Server flags: `-addr 127.0.0.1:4317`, `-no-open`, `-config`, `-data`, `-bundled-skill`, `-version`.
 
 ## Where things live
 
@@ -231,7 +270,9 @@ left to the user by design).
 
 ## Development
 
+Swift shell in `macapp/` (SwiftPM, AppKit + WebKit + Sparkle; `swift build -c release`).
 Go stdlib server (`main.go`, `server.go`, `runs.go`, `parsers.go`, `projects.go`, `actions.go`,
-`agents.go`, `skillfs.go`, `security.go`, `config.go`) with the web UI embedded from `web/`
+`agents.go`, `skillfs.go`, `skillsync.go`, `security.go`, `secrets.go`, `doctor.go`, `genres.go`,
+`config.go`) with the web UI embedded from `web/`
 (Preact 10.29.8 + htm 3.1.1 as local ES modules, no build step). Parser tests replay recorded
 CLI output from `testdata/`.

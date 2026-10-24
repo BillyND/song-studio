@@ -37,25 +37,52 @@ Flags: `-addr 127.0.0.1:4317`, `-no-open`, `-config`, `-data`, `-version`.
 | `~/.claude/skills/suno-que-huong/` | the skill the agents and scripts follow |
 | `~/.config/que-huong-studio/config.json` | settings (default agent, permission mode, concurrency, CLI paths, folders) |
 | `~/.local/share/que-huong-studio/runs/<id>/` | each run: `meta.json`, `events.jsonl`, raw `stdout.log`; the newest 300 are kept |
-| `~/.local/share/que-huong-studio/studio.log` | server log when started from the app |
+| `~/.local/share/que-huong-studio/studio.log` | server log when started from the app (rotated to `studio.log.1` past 5 MB) |
 | `~/.config/suno-que-huong/aihub.key` | image API key read by the image script (mode 600); the studio never shows it |
 
 ## Workflow steps
 
 | Step | Done when | Actions |
 |---|---|---|
-| Lời bài hát | `lyrics.txt` has text | edit, lục bát check, agent: review + sectioning + Styles |
-| Prompt Suno | `suno/lyrics.txt` and `suno/style.txt` exist and are newer than the lyrics | copy blocks, edit, agent: fill suno.com/create via CUA (never presses Create) |
+| Lời, bài mẫu & yêu cầu | `lyrics.txt` has text | edit, lục bát check, reference songs (drop, pick from Downloads or paste a path; copied to `ref/`, analysed into `ref/<file>.analysis.txt`), the brief (`brief.md`) with prompt snippets, the arrangement profile (read from the skill, or chosen automatically), then **Tạo prompt Suno** |
+| Prompt Suno | `suno/lyrics.txt` and `suno/style.txt` exist and are newer than the lyrics, brief and analyses | chain status, copy/edit blocks, "why this arrangement" (`suno/profile.md`), agent: fill suno.com/create via CUA (never presses Create), agent: save the arrangement to the skill as a new profile |
 | Nhạc từ Suno | `project.json` `audio` points at a file | drop the M4A, pick a recent Downloads file, or paste a path |
 | Canh lời | `work/timings.json` exists | script `karaoke-align.py` |
-| Rút ngắn intro | intro cut, or the voice already enters before 15 s | script `trim-intro.py` |
+| Rút ngắn intro | intro cut, or the voice already enters before 15 s | script `trim-intro.py` (a no-op when nothing needs cutting) |
 | Cảnh & ảnh AI | every non-reused scene has `img/<id>.png` | agent: plan scenes; script: generate missing images |
-| Xem trước | stills exist and were rendered from the current inputs | script: render stills |
-| Xuất video | an MP4 exists and was rendered from the current inputs | script: full render; agent: finish all video steps |
+| Xem trước | stills exist and were rendered from the current inputs | script: render stills (`still auto` picks the checkpoints) |
+| Xuất video | an MP4 exists and was rendered from the current inputs | **Làm video tự động** (whole chain), or render only |
 
-"Current inputs" is a fingerprint of the video-relevant `project.json` keys, the timings and the
-images, recorded when a stills or render run succeeds (`work/studio-stamps.json`). Editing other
-keys, such as `vocal`, does not mark the video stale.
+The New Song dialog takes the same reference songs and brief, and by default starts
+**Tạo prompt Suno** right away, so a song goes from lyrics to a ready Suno prompt in one step.
+
+### Always one obvious next action
+
+- The song header has one primary button that follows progress: **Tạo prompt Suno** →
+  **Thêm nhạc từ Suno** → **Làm video** → **Xem video** (or **Đang chạy…**, which opens the
+  running job).
+- Every step ends with a **Tiếp: …** bar pointing to the next step.
+- As soon as the music is added, the Nhạc step shows **Làm video tự động**; one click runs the
+  whole video chain (about 12–25 minutes) and the page can be closed meanwhile.
+
+## Chains and parallel work
+
+**Tạo prompt Suno** queues a chain: reference analysis (if any file is unanalysed) runs in
+parallel with the lyric-review agent; the arrangement agent starts when both succeed and
+writes Styles, section-tag descriptions, `suno/profile.md`, `vocal` and `profile`. A failed link
+fails the links after it instead of leaving them waiting. **Làm video tự động** chains align →
+trim → scenes agent → images → stills → render and skips links that are already done. The
+console shows the whole chain above the timeline; click a link to follow it.
+
+Jobs are either heavy (vocal separation, alignment, analysis, stills, render: default 1 at a
+time) or light (agents and image downloads: default 3 in parallel). Both limits are in Cài đặt.
+Default credits for new songs and the image model are there too.
+
+## Prompt snippets
+
+Cài đặt → **Prompt mở rộng** holds reusable instructions (for example "Không bộ gõ", "Dân ca
+mượt mà"). They appear as one-click chips under every agent note, the free-task box, the skill
+change box and the brief; clicking appends the text.
 
 ## Agents
 
@@ -66,12 +93,14 @@ Agent runs are headless, so they cannot ask for permission:
 - **Chỉ sửa file** maps to `acceptEdits` / `--sandbox workspace-write`; scripts will not run.
   omp has no such mode, so omp runs are refused while it is selected.
 
+The console shows each agent's replies, thinking and tool calls with their output. omp's computer-use calls appear as **CUA** with the agent's stated intent and the exact code it ran ("Agent điền form Suno" drives Chrome through the `cua_repl` MCP server of the spawned agent, never pressing Create).
+
 Every step prompt tells the agent to read the skill first, not to ask questions (open questions
 go to `suno/notes.md`), never to print keys, and to answer in Vietnamese. The skill page sends
 free-form change requests to an agent working inside the skill folder, which follows
 ak-skill-creator's update flow and runs the validators.
 
-Jobs queue: by default one runs at a time because the machine is often loaded. Stopping a run
+Stopping a run
 sends SIGTERM to its whole process group, then SIGKILL after 6 s. A run ends when its main
 process exits, even if a detached child still holds its output open (3 s grace).
 
@@ -89,6 +118,18 @@ own page:
 - `project.json` and skill edits carry the hash they were based on and are refused if an agent
   changed the file meanwhile;
 - file access is confined to the skill folder and the songs folder, symlinks included.
+
+## Reliability
+
+- Chain links skip per-step preconditions (for example "no timings yet") because the link
+  before them produces those inputs; each script checks again when it actually runs.
+- Every list in a song's data is an array, never `null`, and each page sits inside an error
+  boundary: a broken view shows "Trang này gặp lỗi" with a retry instead of blanking the app.
+- Layout follows the width of the main column (CSS container queries), so an open console never
+  squeezes the song header or steps.
+- After `make install`, an already-open tab shows "Studio vừa được cập nhật" with a reload button
+  (the page compares its UI build hash with the server's).
+- Progress bars from tools such as Demucs are filtered out of the run log.
 
 ## Troubleshooting
 

@@ -1,10 +1,10 @@
 // Shared runtime: Preact bindings, API client, a tiny global store and formatting helpers.
 import { h, render } from "/lib/preact.mjs";
-import { useState, useEffect, useRef, useMemo, useCallback, useLayoutEffect } from "/lib/hooks.mjs";
+import { useState, useEffect, useRef, useMemo, useCallback, useLayoutEffect, useErrorBoundary } from "/lib/hooks.mjs";
 import htm from "/lib/htm.mjs";
 
 export const html = htm.bind(h);
-export { h, render, useState, useEffect, useRef, useMemo, useCallback, useLayoutEffect };
+export { h, render, useState, useEffect, useRef, useMemo, useCallback, useLayoutEffect, useErrorBoundary };
 
 const token = document.querySelector('meta[name="studio-token"]')?.content || "";
 

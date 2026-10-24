@@ -1,10 +1,12 @@
 package main
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
-	"sort"
+	"regexp"
 	"strings"
 )
 
@@ -14,9 +16,12 @@ type ActionRequest struct {
 	Model   string    `json:"model"`
 	Note    string    `json:"note"`    // extra instruction typed by the user
 	FixAll  bool      `json:"fixAll"`  // lyrics: apply structural proposals too
-	Profile string    `json:"profile"` // lyrics: "A" or "B"
+	Profile string    `json:"profile"` // "" = choose from references and brief, else a skill profile id
 	VocalAt float64   `json:"vocalAt"` // trim target second
 	Times   []float64 `json:"times"`   // stills
+	// chained is set for links of a chain: inputs made by earlier links do not exist yet,
+	// so per-step preconditions are skipped and the scripts check at run time.
+	chained bool
 }
 
 // Action describes one runnable step action for the UI.
@@ -25,22 +30,63 @@ type Action struct {
 	Step  string `json:"step"`
 	Label string `json:"label"`
 	Kind  string `json:"kind"` // script or agent
+	Heavy bool   `json:"heavy,omitempty"`
 	Hint  string `json:"hint"`
 }
 
 var workflowActions = []Action{
-	{ID: "ref.analyze", Step: "ref", Label: "Phân tích bài mẫu", Kind: "script", Hint: "Đo tempo, giọng, hợp âm, bộ gõ, bass, cấu trúc"},
-	{ID: "ref.agent", Step: "ref", Label: "Agent tạo kiểu phối riêng", Kind: "agent", Hint: "Từ phân tích bài mẫu và yêu cầu mở rộng, viết suno/profile.md"},
-	{ID: "ref.save.agent", Step: "ref", Label: "Agent lưu kiểu phối vào skill", Kind: "agent", Hint: "Thêm thành profile dùng lại trong references/style-profiles.md"},
-	{ID: "lyrics.agent", Step: "lyrics", Label: "Agent soát lời & chia đoạn", Kind: "agent", Hint: "Sửa tên, dấu, chia Verse/Chorus, viết Styles"},
+	{ID: "ref.analyze", Step: "lyrics", Label: "Phân tích bài mẫu", Kind: "script", Heavy: true, Hint: "Đo tempo, giọng, hợp âm, bộ gõ, bass, cấu trúc"},
+	{ID: "lyrics.agent", Step: "suno", Label: "Soát lời & chia đoạn", Kind: "agent", Hint: "Sửa tên, dấu, dấu câu; chia Verse/Chorus"},
+	{ID: "style.agent", Step: "suno", Label: "Phối khí & viết Styles", Kind: "agent", Hint: "Từ bài mẫu, yêu cầu và kiểu phối, viết Styles và thẻ đoạn"},
 	{ID: "suno.agent", Step: "suno", Label: "Agent điền form Suno", Kind: "agent", Hint: "Dùng CUA mở suno.com/create, không bấm Create"},
-	{ID: "align", Step: "align", Label: "Canh lời", Kind: "script", Hint: "Tách giọng + Whisper, khoảng 3 phút"},
-	{ID: "trim", Step: "trim", Label: "Cắt intro", Kind: "script", Hint: "Bỏ các câu nhạc dạo cho giọng vào ~11s"},
+	{ID: "ref.save.agent", Step: "suno", Label: "Lưu kiểu phối vào skill", Kind: "agent", Hint: "Thêm thành profile dùng lại trong references/style-profiles.md"},
+	{ID: "align", Step: "align", Label: "Canh lời", Kind: "script", Heavy: true, Hint: "Tách giọng + Whisper, khoảng 3 phút"},
+	{ID: "trim", Step: "trim", Label: "Cắt intro", Kind: "script", Heavy: true, Hint: "Bỏ các câu nhạc dạo cho giọng vào ~11s"},
 	{ID: "scenes.agent", Step: "scenes", Label: "Agent lên danh sách cảnh", Kind: "agent", Hint: "Viết scenes vào project.json theo lời"},
-	{ID: "images", Step: "scenes", Label: "Tạo ảnh còn thiếu", Kind: "script", Hint: "gpt-image-2.5, 4 ảnh song song"},
-	{ID: "stills", Step: "stills", Label: "Render khung hình xem trước", Kind: "script", Hint: "Tựa đề, đếm ngược, giữa câu, đoạn kết"},
-	{ID: "render", Step: "render", Label: "Xuất video", Kind: "script", Hint: "MP4 1080p, khoảng 8–9 phút"},
-	{ID: "autopilot.agent", Step: "render", Label: "Agent làm nốt các bước video", Kind: "agent", Hint: "Canh lời → cảnh → ảnh → xem trước → xuất"},
+	{ID: "images", Step: "scenes", Label: "Tạo ảnh còn thiếu", Kind: "script", Hint: "4 ảnh song song qua hub ảnh"},
+	{ID: "stills", Step: "stills", Label: "Render khung hình xem trước", Kind: "script", Heavy: true, Hint: "Tựa đề, đếm ngược, giữa câu, đoạn kết"},
+	{ID: "render", Step: "render", Label: "Xuất video", Kind: "script", Heavy: true, Hint: "MP4 1080p, khoảng 8–9 phút"},
+}
+
+func findAction(id string) *Action {
+	for i := range workflowActions {
+		if workflowActions[i].ID == id {
+			return &workflowActions[i]
+		}
+	}
+	return nil
+}
+
+// Profile is one arrangement profile defined in the skill's references/style-profiles.md.
+type Profile struct {
+	ID    string `json:"id"`
+	Title string `json:"title"`
+}
+
+var profileHeading = regexp.MustCompile(`(?m)^## ([A-Z][A-Z0-9]*)\. (.+)$`)
+
+// skillProfiles reads the profile list from the skill, so new profiles appear without code changes.
+func skillProfiles(skill string) []Profile {
+	b, err := os.ReadFile(filepath.Join(skill, "references", "style-profiles.md"))
+	if err != nil {
+		return nil
+	}
+	out := []Profile{}
+	for _, m := range profileHeading.FindAllStringSubmatch(string(b), -1) {
+		out = append(out, Profile{ID: m[1], Title: strings.TrimSpace(m[2])})
+	}
+	return out
+}
+
+func profileInstruction(req ActionRequest, skill string) string {
+	if req.Profile != "" {
+		for _, p := range skillProfiles(skill) {
+			if p.ID == req.Profile {
+				return fmt.Sprintf("Người dùng chọn profile %s (%s) trong references/style-profiles.md: lấy làm nền, rồi chỉnh theo yêu cầu mở rộng.", p.ID, p.Title)
+			}
+		}
+	}
+	return "Chưa chọn profile: tự chọn profile gần nhất trong references/style-profiles.md theo số đo bài mẫu và yêu cầu mở rộng, rồi chỉnh theo chúng (nếu không có bài mẫu và yêu cầu thì dùng profile mặc định của skill)."
 }
 
 const promptHeader = `Bạn đang chạy trong Quê Hương Studio, không có người trả lời giữa chừng.
@@ -55,77 +101,53 @@ func buildActionPrompt(action, skill, dir string, req ActionRequest, d ProjectDe
 	var body string
 	switch action {
 	case "lyrics.agent":
-		profile := req.Profile
-		if profile != "A" {
-			profile = "B"
-		}
 		structural := "Chỉ sửa lỗi rõ ràng; các đề xuất cấu trúc (thêm câu, sửa vần) ghi vào notes.md, chưa áp dụng."
 		if req.FixAll {
 			structural = "Người dùng đã đồng ý sửa hết: áp dụng cả các đề xuất cấu trúc và liệt kê chúng."
 		}
-		if strings.TrimSpace(d.Profile) != "" {
-			profile = "riêng của bài này"
-		}
-		if strings.TrimSpace(d.Brief) != "" {
-			structural += " Tôn trọng yêu cầu mở rộng trong " + dir + "/brief.md."
-		}
-		body = fmt.Sprintf(`Việc: bước 1–3 của skill cho lời ở %[1]s/lyrics.txt.
+		body = fmt.Sprintf(`Việc (một phần của chuỗi, chạy song song với việc phân tích bài mẫu): soát lời và chia đoạn cho %[1]s/lyrics.txt.
 - Soát lời theo references/lyric-review.md (chạy scripts/check-luc-bat.py). %[2]s
-- Dùng profile %[3]s (xem %[1]s/suno/profile.md nếu có: khi đó dùng đúng Styles, giọng và thẻ đoạn trong file đó thay cho profile A/B của references/style-profiles.md).
-- Ghi %[1]s/suno/lyrics.txt: lời đã gắn thẻ đoạn, sẵn để dán vào ô Lyrics của Suno.
-- Ghi %[1]s/suno/style.txt: nội dung ô Styles (dưới 1000 ký tự).
-- Cập nhật %[1]s/project.json (giữ nguyên các khoá khác): "title", "subtitle", "vocal" ("Male"/"Female"), "profile".
+- Chia đoạn theo mục "Mapping lyrics to sections" và ghi %[1]s/suno/lyrics.txt: lời đã gắn thẻ đoạn trơn như [Intro], [Verse 1], [Chorus], [Interlude], [Break], [Final Chorus], [Outro], [End], CHƯA ghi mô tả nhạc cụ trong thẻ (bước phối khí sẽ thêm).
+- Nếu chưa có "title"/"subtitle" trong %[1]s/project.json thì đặt theo mục Title (giữ nguyên các khoá khác).
 - Ghi %[1]s/suno/notes.md: danh sách sửa (cũ → mới), đề xuất chưa áp dụng, câu hỏi mở.
-- Không sửa %[1]s/lyrics.txt. Không mở trình duyệt.`, dir, structural, profile)
+- Không sửa %[1]s/lyrics.txt, không viết Styles, không mở trình duyệt.`, dir, structural)
+	case "style.agent":
+		body = fmt.Sprintf(`Việc (bước cuối của chuỗi tạo prompt Suno): phối khí và viết prompt cho bài.
+Đầu vào, theo thứ tự ưu tiên:
+1. Yêu cầu mở rộng của người dùng: %[1]s/brief.md (nếu có; làm đúng từng ý).
+2. Số đo bài mẫu: %[1]s/ref/*.analysis.txt (nếu có).
+3. %[2]s
+4. Lời đã chia đoạn: %[1]s/suno/lyrics.txt.
+Quy tắc:
+- Chỉ học phong cách từ bài mẫu (tempo, chất vùng miền, dàn nhạc, độ dày bộ gõ và bass, độ dài intro). Không chép giai điệu, lời, tên bài hay câu nhạc đặc trưng. Không đưa file bài mẫu lên Suno hay dịch vụ nào.
+- Styles tiếng Anh, dưới 1000 ký tự, mô tả theo hướng có gì vì Suno hiểu sai câu phủ định (ví dụ "không bộ gõ" thành "no percussion section; the pulse is carried by plucked strings and the vocal phrasing").
+Ghi ra:
+- %[1]s/suno/style.txt: nội dung ô Styles.
+- %[1]s/suno/lyrics.txt: thêm mô tả ngắn bằng tiếng Anh vào từng thẻ đoạn (ví dụ [Verse 2: đàn tranh and soft strings join]), đúng yêu cầu (không bộ gõ thì không nhắc drums/percussion). Không đổi dòng lời nào.
+- %[1]s/suno/profile.md (tiếng Việt): bài mẫu cho thấy gì, các yêu cầu đã áp ra sao, dựa trên profile nào, Vocal Gender, và khối Styles.
+- %[1]s/project.json: cập nhật "vocal" ("Male"/"Female") và "profile" (id profile nền hoặc "custom"), giữ nguyên các khoá khác.`, dir, profileInstruction(req, skill))
 	case "suno.agent":
 		if d.SunoLyrics == "" {
-			return "", errors.New("chưa có suno/lyrics.txt: chạy bước Lời bài hát trước")
+			return "", errors.New("chưa có prompt: bấm Tạo prompt Suno trước")
 		}
 		body = fmt.Sprintf(`Việc: bước 4 của skill. Điền suno.com/create qua CUA theo references/suno-cua-fill.md.
 - Lyrics: nội dung %[1]s/suno/lyrics.txt. Styles: %[1]s/suno/style.txt.
 - Vocal Gender và tên bài lấy từ %[1]s/project.json ("vocal", "title" + "subtitle").
 - Kiểm tra từng ô sau khi dán, kiểm tra thanh địa chỉ không bị dán nhầm.
 - TUYỆT ĐỐI không bấm Create.`, dir)
+	case "ref.save.agent":
+		if strings.TrimSpace(d.Profile) == "" {
+			return "", errors.New("chưa có suno/profile.md: bấm Tạo prompt Suno trước")
+		}
+		body = fmt.Sprintf(`Việc: thêm kiểu phối trong %[1]s/suno/profile.md và %[1]s/suno/style.txt vào skill thành một profile dùng lại được.
+- Sửa references/style-profiles.md: thêm mục "## <chữ cái kế tiếp>. <tên>" (tên theo ghi chú của người dùng, nếu không có thì theo đặc điểm chính), đúng định dạng các profile hiện có: số đo, khối Styles, Vocal Gender, thẻ đoạn. Không đổi các profile cũ.
+- Cập nhật SKILL.md và references/lyric-review.md chỉ ở chỗ liệt kê lựa chọn profile, nếu cần.
+- Làm theo luồng update của ~/.claude/skills/ak-skill-creator nếu có, rồi chạy quick_validate, lint_cruft --routing và test trong scripts/tests.`, dir)
 	case "scenes.agent":
 		if len(d.Timings) == 0 {
 			return "", errors.New("chưa có timing: chạy bước Canh lời trước")
 		}
-		body = fmt.Sprintf(`Việc: lên danh sách cảnh cho video theo references/karaoke-video.md (mục Plan scenes và Style contract).
-- Đọc %[1]s/work/timings.json, %[1]s/lyrics.txt và %[1]s/project.json.
-- Ghi mảng "scenes" vào %[1]s/project.json, giữ nguyên các khoá khác. Mỗi cảnh: "id" dạng "NN-ten-ngan", "start" (giây, trùng đầu một câu), "prompt" tiếng Anh nêu đúng địa danh.
-- Cảnh 1 là ảnh tựa đề (nửa trái trống), cảnh 2 bắt đầu khoảng 5 giây trước chữ hát đầu tiên, cảnh cuối dùng lại cảnh 1 với "reuse": true làm cảnh kết khoảng 15 giây trước khi hết bài.
-- Không tạo ảnh và không render.`, dir)
-	case "ref.agent":
-		if len(d.Refs) == 0 && strings.TrimSpace(d.Brief) == "" {
-			return "", errors.New("cần ít nhất một bài mẫu hoặc yêu cầu mở rộng")
-		}
-		body = fmt.Sprintf(`Việc: tạo kiểu phối riêng cho bài này, rồi ghi vào %[1]s/suno/profile.md.
-Đầu vào:
-- Yêu cầu mở rộng của người dùng: %[1]s/brief.md (ưu tiên cao nhất; làm đúng từng ý).
-- Kết quả đo bài mẫu: %[1]s/ref/*.analysis.txt. Nếu bài mẫu chưa có file phân tích, tự chạy: PY=$(bash scripts/setup-video-env.sh) && "$PY" scripts/analyze-reference.py "<file>" trong thư mục skill.
-- Các kiểu phối đã có và cách chuyển số đo thành prompt: references/style-profiles.md (mục "Adapting a profile").
-Quy tắc:
-- Chỉ học phong cách (tempo, chất vùng miền, dàn nhạc, độ dày bộ gõ và bass, độ dài intro). Không chép giai điệu, lời, tên bài hay câu nhạc đặc trưng của bài mẫu. Không đưa file bài mẫu lên Suno hay dịch vụ nào.
-- Styles viết tiếng Anh, dưới 1000 ký tự, mô tả theo hướng có gì (Suno hiểu sai câu phủ định): ví dụ "không bộ gõ" thành "no percussion section; the pulse is carried by plucked đàn tranh and the vocal phrasing", và bỏ mọi chữ drums/percussion khỏi thẻ đoạn.
-Nội dung %[1]s/suno/profile.md (tiếng Việt, trừ ô Styles):
-1. Tóm tắt bài mẫu: các số đo chính và cảm nhận phong cách.
-2. Các yêu cầu mở rộng đã áp dụng thế nào.
-3. Styles (khối code, sẵn để dán vào Suno).
-4. Vocal Gender.
-5. Thẻ đoạn: [Intro …] tới [End], theo cấu trúc của skill.
-Không sửa lyrics.txt, không chạy các bước khác.`, dir)
-	case "ref.save.agent":
-		if strings.TrimSpace(d.Profile) == "" {
-			return "", errors.New("chưa có suno/profile.md: chạy 'Agent tạo kiểu phối riêng' trước")
-		}
-		body = fmt.Sprintf(`Việc: thêm kiểu phối trong %[1]s/suno/profile.md vào skill thành một profile dùng lại được.
-- Sửa references/style-profiles.md: thêm mục mới (đặt tên theo ghi chú của người dùng, nếu không có thì đặt theo đặc điểm chính), giữ đúng định dạng các profile A/B: số đo, khối Styles, Vocal Gender, thẻ đoạn. Không đổi các profile cũ.
-- Cập nhật SKILL.md và references/lyric-review.md chỉ ở chỗ liệt kê lựa chọn profile, nếu cần.
-- Làm theo luồng update của ~/.claude/skills/ak-skill-creator nếu có, rồi chạy quick_validate, lint_cruft --routing và test trong scripts/tests.`, dir)
-	case "autopilot.agent":
-		body = fmt.Sprintf(`Việc: làm nốt các bước video còn thiếu cho dự án theo references/karaoke-video.md, theo thứ tự: canh lời (nếu chưa có work/timings.json), cắt intro (nếu giọng vào sau 15 giây), lên cảnh, tạo ảnh (xem contact sheet, tạo lại ảnh lỗi), render khung hình kiểm tra và tự xem chúng, rồi xuất video ra "%[1]s/<title> <subtitle> - Karaoke.mp4".
-- Dùng python của môi trường cố định: PY=$(bash scripts/setup-video-env.sh).
-- Chạy từng bước nặng một lần, không chạy song song.`, dir)
+		body = sceneBody(dir)
 	default:
 		return "", fmt.Errorf("unknown agent action %q", action)
 	}
@@ -133,6 +155,147 @@ Không sửa lyrics.txt, không chạy các bước khác.`, dir)
 		body += "\nGhi chú thêm của người dùng: " + strings.TrimSpace(req.Note)
 	}
 	return head + "\n" + body, nil
+}
+
+func sceneBody(dir string) string {
+	return fmt.Sprintf(`Việc: lên danh sách cảnh cho video theo references/karaoke-video.md (mục Plan scenes và Style contract).
+- Đọc %[1]s/work/timings.json, %[1]s/lyrics.txt và %[1]s/project.json.
+- Ghi mảng "scenes" vào %[1]s/project.json, giữ nguyên các khoá khác. Mỗi cảnh: "id" dạng "NN-ten-ngan", "start" (giây, trùng đầu một câu), "prompt" tiếng Anh nêu đúng địa danh.
+- Cảnh 1 là ảnh tựa đề (nửa trái trống), cảnh 2 bắt đầu khoảng 5 giây trước chữ hát đầu tiên, cảnh cuối dùng lại cảnh 1 với "reuse": true làm cảnh kết khoảng 15 giây trước khi hết bài.
+- Không tạo ảnh và không render.`, dir)
+}
+
+// sceneRetimeBody keeps the existing scenes and images and only moves their start times
+// onto the new timings (used after the music was replaced and re-aligned).
+func sceneRetimeBody(dir string) string {
+	return fmt.Sprintf(`Việc: nhạc của bài vừa được thay và canh lời lại, nên mốc thời gian các cảnh đã lệch.
+- Đọc %[1]s/work/timings.json (mới) và mảng "scenes" trong %[1]s/project.json.
+- Giữ nguyên "id", "prompt", "reuse" và thứ tự các cảnh; chỉ sửa "start" để mỗi cảnh lại bắt đầu đúng đầu câu lời tương ứng, theo quy tắc trong references/karaoke-video.md (cảnh 2 khoảng 5 giây trước chữ hát đầu, cảnh kết khoảng 15 giây trước khi hết bài).
+- Không đổi khoá nào khác, không tạo ảnh, không render.`, dir)
+}
+
+// pipelineSpecs lays out a chain of runs: specs plus, for each, the indexes it waits on.
+// "suno": [reference analysis] ‖ lyric review → arrangement & Styles.
+// "video": align → trim → scenes → images → stills → render, skipping steps already done.
+func pipelineSpecs(name string, cfg Config, d ProjectDetail, req ActionRequest) ([]RunSpec, [][]int, error) {
+	agent := req.Agent
+	if agent == "" {
+		agent = cfg.DefaultAgent
+	}
+	var specs []RunSpec
+	var deps [][]int
+	addScript := func(id string, after []int, override ...ActionRequest) error {
+		act := findAction(id)
+		r := req
+		if len(override) > 0 {
+			r = override[0]
+		}
+		r.chained = true
+		argv, title, err := scriptArgv(id, cfg.SkillDir, d.Dir, r, d)
+		if err != nil {
+			return err
+		}
+		spec := RunSpec{Kind: "script", Step: act.Step, Project: d.Slug, Cwd: cfg.SkillDir, Argv: argv, Title: title, Heavy: act.Heavy}
+		if id == "stills" || id == "render" {
+			spec.FingerprintDir = d.Dir
+		}
+		specs, deps = append(specs, spec), append(deps, after)
+		return nil
+	}
+	addAgent := func(id string, prompt string, after []int) error {
+		act := findAction(id)
+		argv, err := agentArgv(cfg, agent, req.Model, prompt, d.Dir)
+		if err != nil {
+			return err
+		}
+		specs = append(specs, RunSpec{Kind: "agent", Step: act.Step, Project: d.Slug, Cwd: d.Dir, Agent: agent, Model: req.Model, Prompt: prompt, Argv: argv, Title: act.Label})
+		deps = append(deps, after)
+		return nil
+	}
+	last := func() []int {
+		if len(specs) == 0 {
+			return nil
+		}
+		return []int{len(specs) - 1}
+	}
+	switch name {
+	case "suno":
+		if strings.TrimSpace(d.Lyrics) == "" {
+			return nil, nil, errors.New("cần có lời bài hát trước")
+		}
+		wait := []int{}
+		unanalysed := false
+		for _, r := range d.Refs {
+			if r.Analysis == "" {
+				unanalysed = true
+			}
+		}
+		if unanalysed {
+			if err := addScript("ref.analyze", nil); err != nil {
+				return nil, nil, err
+			}
+			wait = append(wait, len(specs)-1)
+		}
+		lp, err := buildActionPrompt("lyrics.agent", cfg.SkillDir, d.Dir, req, d)
+		if err != nil {
+			return nil, nil, err
+		}
+		if err := addAgent("lyrics.agent", lp, nil); err != nil {
+			return nil, nil, err
+		}
+		wait = append(wait, len(specs)-1)
+		sp, _ := buildActionPrompt("style.agent", cfg.SkillDir, d.Dir, req, d)
+		if err := addAgent("style.agent", sp, wait); err != nil {
+			return nil, nil, err
+		}
+	case "video":
+		if d.Audio == "" {
+			return nil, nil, errors.New("cần thêm file nhạc M4A trước")
+		}
+		var pc projectConfig
+		_ = json.Unmarshal(d.Config, &pc)
+		status := map[string]string{}
+		for _, s := range d.Steps {
+			status[s.ID] = s.Status
+		}
+		// stale timings (the music was replaced) are redone, not reused
+		realign := len(d.Timings) == 0 || status["align"] == "stale" || status["align"] == "todo"
+		if realign {
+			if err := addScript("align", nil); err != nil {
+				return nil, nil, err
+			}
+		}
+		// trim only when the voice enters late; with fresh timings the script decides itself
+		if len(pc.IntroCut) == 0 && (realign || status["trim"] == "todo") {
+			if err := addScript("trim", last()); err != nil {
+				return nil, nil, err
+			}
+		}
+		header := fmt.Sprintf(promptHeader, cfg.SkillDir, d.Dir) + "\n"
+		switch {
+		case len(pc.Scenes) == 0:
+			if err := addAgent("scenes.agent", header+sceneBody(d.Dir), last()); err != nil {
+				return nil, nil, err
+			}
+		case realign:
+			if err := addAgent("scenes.agent", header+sceneRetimeBody(d.Dir), last()); err != nil {
+				return nil, nil, err
+			}
+		}
+		if err := addScript("images", last()); err != nil {
+			return nil, nil, err
+		}
+		// stills and render read timings and scenes when they start, so default times are recomputed by the script itself
+		if err := addScript("stills", last(), ActionRequest{}); err != nil {
+			return nil, nil, err
+		}
+		if err := addScript("render", last()); err != nil {
+			return nil, nil, err
+		}
+	default:
+		return nil, nil, fmt.Errorf("unknown pipeline %q", name)
+	}
+	return specs, deps, nil
 }
 
 // scriptArgv builds a deterministic script run in the skill directory.
@@ -151,12 +314,12 @@ for f in "$@"; do echo "== $(basename "$f")"; "$PY" scripts/analyze-reference.py
 		}
 		return argv, "Phân tích bài mẫu", nil
 	case "align":
-		if d.Audio == "" {
+		if d.Audio == "" && !req.chained {
 			return nil, "", errors.New("chưa có file nhạc")
 		}
 		return []string{"/bin/bash", "-c", py + `scripts/karaoke-align.py "$1"`, "align", dir}, "Canh lời từng chữ", nil
 	case "trim":
-		if len(d.Timings) == 0 {
+		if len(d.Timings) == 0 && !req.chained {
 			return nil, "", errors.New("chưa có timing: chạy Canh lời trước")
 		}
 		at := req.VocalAt
@@ -167,12 +330,11 @@ for f in "$@"; do echo "== $(basename "$f")"; "$PY" scripts/analyze-reference.py
 	case "images":
 		return []string{"python3", "scripts/generate-scene-images.py", dir}, "Tạo ảnh cảnh", nil
 	case "stills":
-		times := req.Times
-		if len(times) == 0 {
-			times = defaultStillTimes(d)
-		}
 		argv := []string{"/bin/bash", "-c", py + `scripts/render-karaoke-video.py "$1" still "${@:2}"`, "stills", dir}
-		for _, t := range times {
+		if len(req.Times) == 0 {
+			argv = append(argv, "auto") // the renderer picks checkpoints from the timings it reads at start
+		}
+		for _, t := range req.Times {
 			argv = append(argv, fmt.Sprintf("%.1f", t))
 		}
 		return argv, "Render khung hình xem trước", nil
@@ -182,37 +344,6 @@ for f in "$@"; do echo "== $(basename "$f")"; "$PY" scripts/analyze-reference.py
 		return []string{"/bin/bash", "-c", py + `scripts/render-karaoke-video.py "$1" full "$2"`, "render", dir, out}, "Xuất video karaoke", nil
 	}
 	return nil, "", fmt.Errorf("unknown script action %q", action)
-}
-
-func defaultStillTimes(d ProjectDetail) []float64 {
-	t := []float64{3}
-	if len(d.Timings) > 0 {
-		first := d.Timings[0].Start
-		t = append(t, first-2.5, first+1.5)
-		longest := d.Timings[0]
-		for i, l := range d.Timings {
-			if len(l.Text) > len(longest.Text) {
-				longest = l
-			}
-			if i > 0 && l.Start-d.Timings[i-1].End > 8 { // first line after a long gap: countdown
-				t = append(t, l.Start-2)
-			}
-		}
-		t = append(t, (longest.Start+longest.End)/2)
-		last := d.Timings[len(d.Timings)-1]
-		t = append(t, last.End+4)
-	}
-	sort.Float64s(t)
-	out := []float64{}
-	for _, x := range t {
-		if x >= 0 && (len(out) == 0 || x-out[len(out)-1] > 0.5) {
-			out = append(out, x)
-		}
-	}
-	if len(out) > 8 {
-		out = out[:8]
-	}
-	return out
 }
 
 const skillPromptHeader = `Bạn đang sửa skill suno-que-huong ở %[1]s theo yêu cầu bên dưới, trong Quê Hương Studio (không có người trả lời giữa chừng).

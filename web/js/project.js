@@ -3,7 +3,7 @@ import { html, useState, useEffect, useRef, api, toast, toastError, openRun, bum
 import { Icon } from "./icons.js";
 import { Btn, StatusPill, Seg, Switch, Modal, Lightbox, Markdown, Empty, AgentPicker, useAgentChoice, AgentIcon, Field, PresetChips } from "./ui.js";
 
-const STEP_ICON = { ref: "wand", lyrics: "type", suno: "sparkles", audio: "music", align: "mic", trim: "scissors", scenes: "image", stills: "eye", render: "film" };
+const STEP_ICON = { lyrics: "type", suno: "sparkles", audio: "music", align: "mic", trim: "scissors", scenes: "image", stills: "eye", render: "film" };
 
 export function ProjectPage({ slug, step }) {
   const [d, setD] = useState(null);
@@ -25,9 +25,8 @@ export function ProjectPage({ slug, step }) {
   if (err) return html`<div class="page"><${Empty} icon="alert" title="Không mở được bài">${err.message}</${Empty}></div>`;
   if (!d) return html`<div class="page"><div class="empty"><${Icon} name="loader" class="spin" size=${22} /></div></div>`;
   const current = step || (d.steps.find((s) => s.status === "todo" || s.status === "stale") || d.steps[d.steps.length - 1]).id;
-  const stepNo = (i) => i; // step 0 is the optional reference step
   const ctx = { d, slug, reload: load, stamp };
-  const S = { ref: RefStep, lyrics: LyricsStep, suno: SunoStep, audio: AudioStep, align: AlignStep, trim: TrimStep, scenes: ScenesStep, stills: StillsStep, render: RenderStep }[current] || LyricsStep;
+  const S = { lyrics: LyricsStep, suno: SunoStep, audio: AudioStep, align: AlignStep, trim: TrimStep, scenes: ScenesStep, stills: StillsStep, render: RenderStep }[current] || LyricsStep;
   const stepMeta = d.steps.find((s) => s.id === current);
   return html`<div class="page">
     <div class="hero">
@@ -36,16 +35,19 @@ export function ProjectPage({ slug, step }) {
         <div class="grow">
           <a class="small" style="color:rgba(255,255,255,.75)" href="#/">← Bài hát</a>
           <h1>${d.title} <span style="font-weight:500;opacity:.8">${d.subtitle}</span></h1>
-          <div class="muted small">${d.done}/${d.total} bước xong · cập nhật ${ago(d.updated)} · <span class="mono">${d.dir}</span></div>
+          <div class="muted small">${d.done}/${d.total} bước xong · cập nhật ${ago(d.updated)}<span class="hero-path"> · <span class="mono">${d.dir}</span></span></div>
         </div>
-        <${Btn} size="sm" icon="folder" onClick=${() => api(`/api/projects/${slug}/open`, { method: "POST", body: { path: "" } }).catch(toastError)}>Mở thư mục</${Btn}>
-        <${FreeAgentButton} slug=${slug} />
+        <div class="hero-actions">
+          <${Btn} size="sm" icon="folder" onClick=${() => api(`/api/projects/${slug}/open`, { method: "POST", body: { path: "" } }).catch(toastError)}>Mở thư mục</${Btn}>
+          <${FreeAgentButton} slug=${slug} />
+          <${PrimaryAction} d=${d} slug=${slug} />
+        </div>
       </div>
     </div>
     <div class="workspace">
       <div class="card steps">${d.steps.map((s, i) => html`
         <div class=${`step ${s.status}${s.id === current ? " active" : ""}`} onClick=${() => go(`/p/${encodeURIComponent(slug)}/${s.id}`)}>
-          <div class="step-dot">${s.status === "done" || s.status === "skip" ? html`<${Icon} name="check" size=${15} />` : s.status === "running" ? html`<${Icon} name="loader" size=${15} />` : s.status === "stale" ? html`<${Icon} name="refresh" size=${14} />` : stepNo(i)}</div>
+          <div class="step-dot">${s.status === "done" || s.status === "skip" ? html`<${Icon} name="check" size=${15} />` : s.status === "running" ? html`<${Icon} name="loader" size=${15} />` : s.status === "stale" ? html`<${Icon} name="refresh" size=${14} />` : i + 1}</div>
           <div style="min-width:0"><div class="step-title">${s.title}</div><div class="step-detail" title=${s.detail}>${s.detail}</div></div>
         </div>`)}</div>
       <div class="stack">
@@ -54,10 +56,48 @@ export function ProjectPage({ slug, step }) {
             ${stepMeta.runId && html`<${Btn} size="sm" icon="terminal" onClick=${() => openRun(stepMeta.runId)}>Xem đang chạy</${Btn}>`}</div>
           <div class="muted small" style="margin-bottom:16px">${stepMeta.detail}</div>
           <${S} ...${ctx} />
+          <${NextBar} d=${d} slug=${slug} current=${current} />
         </div>
         <${RecentRuns} slug=${slug} step=${current} />
       </div>
     </div>
+  </div>`;
+}
+
+const stepDone = (d, id) => ["done", "skip"].includes(d.steps.find((s) => s.id === id)?.status);
+const goStep = (slug, id) => go(`/p/${encodeURIComponent(slug)}/${id}`);
+
+// PrimaryAction is the single "do the next thing" button in the song header.
+function PrimaryAction({ d, slug }) {
+  const running = d.steps.some((s) => s.status === "running");
+  if (running) return html`<${Btn} size="sm" kind="primary" icon="loader" onClick=${() => openRun(d.steps.find((s) => s.status === "running").runId)}>Đang chạy…</${Btn}>`;
+  if (!d.audio && !stepDone(d, "suno")) return html`<${Btn} size="sm" kind="primary" icon="sparkles" onClick=${() => goStep(slug, "lyrics")}>Tạo prompt Suno</${Btn}>`;
+  if (!d.audio) return html`<${Btn} size="sm" kind="primary" icon="music" onClick=${() => goStep(slug, "audio")}>Thêm nhạc từ Suno</${Btn}>`;
+  if (!stepDone(d, "render")) return html`<${Btn} size="sm" kind="primary" icon="film" onClick=${async () => { if (await runPipeline(slug, "video")) goStep(slug, "render"); }}>Làm video</${Btn}>`;
+  return html`<${Btn} size="sm" kind="primary" icon="play" onClick=${() => goStep(slug, "render")}>Xem video</${Btn}>`;
+}
+
+// VideoCTA explains and starts the whole video chain in one click.
+function VideoCTA({ d, slug }) {
+  const left = ["align", "trim", "scenes", "stills", "render"].filter((id) => !stepDone(d, id)).length;
+  return html`<div class="cta">
+    <div><div class="row" style="gap:8px"><${Icon} name="film" /><b>Làm video karaoke từ bài này</b></div>
+      <div class="muted small" style="margin-top:4px">Studio tự canh lời theo giọng hát → cắt bớt nhạc dạo nếu dài → agent lên danh sách cảnh → tạo ảnh AI → render khung xem trước → xuất video 1080p. Còn ${left} bước, khoảng 15–25 phút; bạn có thể đóng trang, việc vẫn chạy.</div></div>
+    <div class="cta-go"><${Btn} kind="primary" icon="zap" busy=${d.steps.some((s) => s.status === "running")} onClick=${async () => { if (await runPipeline(slug, "video")) goStep(slug, "render"); }}>Làm video tự động</${Btn}></div>
+  </div>`;
+}
+
+// NextBar sits under every step and says what comes next.
+function NextBar({ d, slug, current }) {
+  const i = d.steps.findIndex((s) => s.id === current);
+  const next = d.steps[i + 1];
+  if (!next) return null;
+  const here = d.steps[i];
+  const ready = here.status === "done" || here.status === "skip";
+  return html`<div class="next-bar">
+    <span class="muted small">${ready ? "Bước này đã xong." : "Làm xong bước này rồi sang:"}</span>
+    <span class="spacer"></span>
+    <${Btn} kind=${ready ? "primary" : ""} icon="chevron" onClick=${() => goStep(slug, next.id)}>Tiếp: ${next.title}</${Btn}>
   </div>`;
 }
 
@@ -69,6 +109,40 @@ async function runAction(slug, action, body = {}) {
     toast(meta.status === "queued" ? "Đã xếp hàng, sẽ chạy khi tới lượt" : "Đã bắt đầu");
     return meta;
   } catch (e) { toastError(e); }
+}
+
+const pending = new Set(); // chains being submitted, so a double click queues nothing twice
+
+async function runPipeline(slug, name, body = {}) {
+  const key = slug + "/" + name;
+  if (pending.has(key)) return;
+  pending.add(key);
+  try {
+    const metas = await api(`/api/projects/${encodeURIComponent(slug)}/pipeline/${name}`, { method: "POST", body });
+    openRun((metas.find((m) => !(m.after || []).length) || metas[0]).id);
+    bumpRuns();
+    toast(`Đã xếp ${metas.length} việc, các việc độc lập chạy song song`);
+    return metas;
+  } catch (e) { toastError(e); } finally { pending.delete(key); }
+}
+
+// ChainStatus shows the newest chain of runs for these steps, e.g. analysis ‖ lyrics → arrangement.
+function ChainStatus({ slug, steps, title }) {
+  const [runs, setRuns] = useState([]);
+  const runsVersion = useStore((s) => s.runsVersion);
+  const load = () => api(`/api/runs?project=${encodeURIComponent(slug)}&limit=60`).then(setRuns).catch(() => {});
+  useEffect(() => { load(); }, [slug, runsVersion]);
+  const group = runs.find((r) => r.group && steps.includes(r.step))?.group;
+  const chain = group ? runs.filter((r) => r.group === group).reverse() : [];
+  const live = chain.some((r) => r.status === "running" || r.status === "queued");
+  useEffect(() => { if (!live) return; const t = setInterval(load, 1500); return () => clearInterval(t); }, [live, group]);
+  if (!chain.length) return null;
+  return html`<div class="chain">
+    <span class="muted small" style="font-weight:650">${title}</span>
+    ${chain.map((r, i) => html`${i > 0 && html`<${Icon} name="chevron" size=${12} class="muted" />`}
+      <button type="button" class="chain-step" onClick=${() => openRun(r.id)} title=${r.title}>
+        <${AgentIcon} agent=${r.kind === "agent" ? r.agent : "script"} /><span>${r.title}</span><${StatusPill} status=${r.status} /></button>`)}
+  </div>`;
 }
 
 function ActionCard({ title, hint, children, onRun, label, busy, icon = "play", agent }) {
@@ -94,12 +168,13 @@ function AgentAction({ slug, action, title, hint, extra, body = {} }) {
   </div>`;
 }
 
+// useSave returns [busy, save]; save resolves true only when the file was written.
 function useSave(slug, reload) {
   const [busy, setBusy] = useState(false);
   return [busy, async (path, content, sha) => {
     setBusy(true);
-    try { await api(`/api/projects/${encodeURIComponent(slug)}/files`, { method: "PUT", body: { path, content, sha } }); toast("Đã lưu"); await reload(); }
-    catch (e) { toastError(e.status === 409 ? new Error("project.json vừa được sửa ở nơi khác (có thể bởi agent). Đóng và mở lại để lấy bản mới.") : e); }
+    try { await api(`/api/projects/${encodeURIComponent(slug)}/files`, { method: "PUT", body: { path, content, sha } }); toast("Đã lưu"); await reload(); return true; }
+    catch (e) { toastError(e.status === 409 ? new Error("project.json vừa được sửa ở nơi khác (có thể bởi agent). Đóng và mở lại để lấy bản mới.") : e); return false; }
     finally { setBusy(false); }
   }];
 }
@@ -128,15 +203,13 @@ function Stat({ k, v, s }) {
   return v ? html`<div class="stat"><div class="k">${k}</div><div class="v">${v}</div>${s && html`<div class="s">${s}</div>`}</div>` : null;
 }
 
-function RefStep({ d, slug, reload, stamp }) {
+const isVideo = (n) => /\.(mp4|webm|mov|mkv)$/i.test(n);
+
+function RefsPanel({ d, slug, reload, stamp }) {
   const [recent, setRecent] = useState([]);
   const [over, setOver] = useState(false);
   const [busy, setBusy] = useState(false);
   const [path, setPath] = useState("");
-  const [brief, setBrief] = useState(d.brief);
-  const [profileName, setProfileName] = useState("");
-  const [saving, save] = useSave(slug, reload);
-  useEffect(() => setBrief(d.brief), [d.brief]);
   useEffect(() => { api("/api/downloads/audio?kind=ref").then(setRecent).catch(() => {}); }, []);
   const base = `/api/projects/${encodeURIComponent(slug)}/refs`;
   const add = async (body) => {
@@ -149,92 +222,109 @@ function RefStep({ d, slug, reload, stamp }) {
     if (!confirm(`Bỏ bài mẫu ${name}?`)) return;
     try { await api(`${base}/${encodeURIComponent(name)}`, { method: "DELETE" }); await reload(); } catch (e) { toastError(e); }
   };
-  const saveBrief = () => save("brief.md", brief);
-  const isVideo = (n) => /\.(mp4|webm|mov|mkv)$/i.test(n);
-  return html`<div class="stack">
-    <div class="muted small">Không bắt buộc. Thêm bài mẫu có sẵn trong máy để agent học phong cách (tiết tấu, chất vùng miền, dàn nhạc), kèm yêu cầu mở rộng của bạn. Bài mẫu chỉ được phân tích trên máy, không gửi lên Suno.</div>
-    <div class=${"dropzone" + (over ? " over" : "")} onDragOver=${(e) => { e.preventDefault(); setOver(true); }} onDragLeave=${() => setOver(false)}
+  const have = new Set(d.refs.map((r) => r.name));
+  return html`<div class="stack" style="gap:10px">
+    <div class=${"dropzone compact" + (over ? " over" : "")} onDragOver=${(e) => { e.preventDefault(); setOver(true); }} onDragLeave=${() => setOver(false)}
       onDrop=${(e) => { e.preventDefault(); setOver(false); [...e.dataTransfer.files].forEach(upload); }}>
-      <${Icon} name="upload" size=${24} /><div style="margin:8px 0 4px;font-weight:600">Kéo bài mẫu vào đây (mp3, m4a, mp4, webm…)</div>
-      <div class="muted small">hoặc <label style="color:var(--accent);cursor:pointer">chọn file<input type="file" accept="audio/*,video/*" multiple hidden onChange=${(e) => [...e.target.files].forEach(upload)} /></label></div>
-      ${busy && html`<div style="margin-top:8px"><${Icon} name="loader" class="spin" /></div>`}
+      <${Icon} name="upload" size=${18} /><span><b>Kéo bài mẫu vào đây</b> <span class="muted">· mp3, m4a, mp4, webm… hoặc</span> <label style="color:var(--accent);cursor:pointer">chọn file<input type="file" accept="audio/*,video/*" multiple hidden onChange=${(e) => [...e.target.files].forEach(upload)} /></label></span>
+      ${busy && html`<${Icon} name="loader" class="spin" />`}
     </div>
-    ${recent.length > 0 && html`<details><summary class="small muted" style="cursor:pointer">Chọn từ Downloads (${recent.length} file mới nhất)</summary>
+    ${recent.length > 0 && html`<details><summary class="small muted" style="cursor:pointer">Chọn từ Downloads</summary>
       <div class="file-list" style="margin-top:8px">${recent.map((f) => html`<div class="file-item" onClick=${() => add({ path: f.path })}><${Icon} name=${isVideo(f.name) ? "film" : "music"} />
-        <div class="grow"><div style="font-weight:600">${f.name}</div><div class="muted small">${bytes(f.size)} · ${ago(f.modified)}</div></div><span class="pill accent">Dùng làm bài mẫu</span></div>`)}</div></details>`}
-    <div class="row"><input class="input" placeholder="hoặc dán đường dẫn, ví dụ ~/Downloads/Ninh Binh nhu mot khuc ca.mp4" value=${path} onInput=${(e) => setPath(e.target.value)} />
+        <div class="grow" style="min-width:0"><div class="ellipsis" style="font-weight:600">${f.name}</div><div class="muted small">${bytes(f.size)} · ${ago(f.modified)}</div></div><span class="pill accent">Thêm</span></div>`)}</div></details>`}
+    <div class="row wrap"><input class="input grow" placeholder="hoặc dán đường dẫn file trong máy" value=${path} onInput=${(e) => setPath(e.target.value)} />
       <${Btn} disabled=${!path.trim()} busy=${busy} onClick=${() => add({ path })}>Thêm</${Btn}></div>
-
     ${d.refs.map((r) => { const a = parseAnalysis(r.analysis); return html`<div class="ref-card">
-      <div class="row"><${Icon} name=${isVideo(r.name) ? "film" : "music"} /><b class="grow">${r.name}</b><span class="muted small">${bytes(r.size)}</span>
+      <div class="row"><${Icon} name=${isVideo(r.name) ? "film" : "music"} /><b class="grow ellipsis">${r.name}</b><span class="muted small">${bytes(r.size)}</span>
         <${Btn} size="sm" kind="ghost" icon="x" title="Bỏ bài mẫu" onClick=${() => remove(r.name)} /></div>
-      ${isVideo(r.name) ? html`<video controls preload="metadata" style="max-height:260px" src=${media(slug, r.path, stamp)}></video>` : html`<audio controls preload="metadata" src=${media(slug, r.path, stamp)}></audio>`}
+      ${isVideo(r.name) ? html`<video controls preload="metadata" style="max-height:240px" src=${media(slug, r.path, stamp)}></video>` : html`<audio controls preload="metadata" src=${media(slug, r.path, stamp)}></audio>`}
       ${a ? html`<div class="analysis">
           <${Stat} k="Tempo" v=${a.tempo && a.tempo + " BPM"} s=${a.range && "dao động " + a.range} />
           <${Stat} k="Giọng" v=${a.key} s=${a.chords} />
           <${Stat} k="Nhịp" v=${a.meter} />
-          <${Stat} k="Bộ gõ" v=${a.perc} s="tỉ lệ hoà âm / bộ gõ" />
+          <${Stat} k="Bộ gõ" v=${a.perc} />
           <${Stat} k="Bass" v=${a.bass} />
           <${Stat} k="Dài" v=${a.duration} s=${a.sections ? a.sections + " đoạn" : ""} />
         </div>
         <details><summary class="small muted" style="cursor:pointer">Số đo đầy đủ</summary><pre class="block" style="margin-top:8px">${r.analysis}</pre></details>`
-        : html`<div class="muted small">Chưa phân tích.</div>`}
+        : html`<div class="muted small">Chưa phân tích, sẽ tự phân tích khi bấm Tạo prompt Suno.</div>`}
     </div>`; })}
-    ${d.refs.length > 0 && html`<${ActionCard} title="Phân tích bài mẫu" hint="Đo tempo, giọng, hợp âm, độ dày bộ gõ và bass, cấu trúc. Khoảng 20–40 giây mỗi bài" onRun=${() => runAction(slug, "ref.analyze")} label="Phân tích" icon="eye" />`}
-
-    <div class="stack" style="gap:8px">
-      <div class="row"><h3>Yêu cầu mở rộng</h3><span class="spacer"></span>
-        <${Btn} size="sm" icon="save" busy=${saving} disabled=${brief === d.brief} onClick=${saveBrief}>Lưu</${Btn}></div>
-      <textarea class="textarea" rows="5" placeholder="Ví dụ: làm theo phong cách dân ca mượt mà nhưng không ề à, không dùng bộ gõ, không bắt chước bài mẫu…" value=${brief}
-        onInput=${(e) => setBrief(e.target.value)} onKeyDown=${(e) => (e.metaKey || e.ctrlKey) && e.key === "s" && (e.preventDefault(), saveBrief())}></textarea>
-      <${PresetChips} value=${brief} onChange=${setBrief} />
-    </div>
-    <${AgentAction} slug=${slug} action="ref.agent" title="Tạo kiểu phối riêng cho bài này"
-      hint="Agent đọc số đo bài mẫu và yêu cầu mở rộng, viết Styles, giọng và thẻ đoạn vào suno/profile.md. Bước Lời bài hát sẽ dùng kiểu phối này" />
-    ${d.profile && html`<div class="stack" style="gap:8px">
-      <h3>Kiểu phối riêng (suno/profile.md)</h3>
-      <div class="bubble"><${Markdown} text=${d.profile} /></div>
-      <${ActionCard} agent title="Lưu thành kiểu phối của skill" hint="Thêm vào references/style-profiles.md để các bài sau chọn lại được"
-        onRun=${() => runAction(slug, "ref.save.agent", { note: profileName ? "Tên profile: " + profileName : "" })} label="Lưu vào skill" icon="save">
-        <input class="input" style="width:220px" placeholder="tên, ví dụ C · Dân ca mượt" value=${profileName} onInput=${(e) => setProfileName(e.target.value)} />
-      </${ActionCard}>
-    </div>`}
+    ${d.refs.some((r) => !r.analysis) && html`<div><${Btn} size="sm" icon="eye" onClick=${() => runAction(slug, "ref.analyze")}>Chỉ phân tích bài mẫu</${Btn}></div>`}
   </div>`;
 }
 
-function LyricsStep({ d, slug, reload }) {
+function ProfileSelect({ value, onChange }) {
+  const profiles = useStore((s) => s.boot?.profiles || []);
+  return html`<select class="select" value=${value} onChange=${(e) => onChange(e.target.value)} aria-label="Kiểu phối">
+    <option value="">Tự chọn theo bài mẫu & yêu cầu</option>
+    ${profiles.map((p) => html`<option value=${p.id}>${p.id} · ${p.title}</option>`)}
+  </select>`;
+}
+
+function LyricsStep({ d, slug, reload, stamp }) {
   const [text, setText] = useState(d.lyrics);
+  const [brief, setBrief] = useState(d.brief);
   const [check, setCheck] = useState(null);
-  const [profile, setProfile] = useState("B");
+  const cfg = safeJSON(d.config);
+  const [profile, setProfile] = useState(cfg.profile && cfg.profile !== "custom" ? cfg.profile : "");
   const [fixAll, setFixAll] = useState(false);
+  const ag = useAgentChoice();
   const [busy, save] = useSave(slug, reload);
   useEffect(() => setText(d.lyrics), [d.lyrics]);
+  useEffect(() => setBrief(d.brief), [d.brief]);
+  const dirty = text !== d.lyrics || brief !== d.brief;
+  const saveAll = async () => {
+    if (text !== d.lyrics && !(await save("lyrics.txt", text))) return false;
+    if (brief !== d.brief && !(await save("brief.md", brief))) return false;
+    return true;
+  };
+  const [starting, setStarting] = useState(false);
   const runCheck = async () => {
     if (text !== d.lyrics) await save("lyrics.txt", text);
     try { setCheck(await api(`/api/projects/${encodeURIComponent(slug)}/lucbat`)); } catch (e) { toastError(e); }
   };
+  const generate = async () => {
+    setStarting(true);
+    try {
+      if (!(await saveAll())) return; // never build a prompt from text that failed to save
+      const metas = await runPipeline(slug, "suno", { agent: ag.agent, model: ag.model, profile, fixAll });
+      if (metas) go(`/p/${encodeURIComponent(slug)}/suno`);
+    } finally { setStarting(false); }
+  };
+  const chainRunning = d.steps.some((s) => (s.id === "suno" || s.id === "lyrics") && s.status === "running");
   const issues = check ? check.filter((r) => r.notes.some((n) => !n.startsWith("có tiếng đệm"))).length : 0;
   return html`<div class="stack">
-    <textarea class="textarea" rows="14" value=${text} onInput=${(e) => setText(e.target.value)} onKeyDown=${(e) => (e.metaKey || e.ctrlKey) && e.key === "s" && (e.preventDefault(), save("lyrics.txt", text))}></textarea>
-    <div class="row wrap">
-      <${Btn} icon="save" busy=${busy} disabled=${text === d.lyrics} onClick=${() => save("lyrics.txt", text)}>Lưu lời</${Btn}>
-      <${Btn} icon="check" onClick=${runCheck}>Kiểm tra lục bát</${Btn}>
-      <span class="muted small">${text.trim() ? text.trim().split("\n").length : 0} dòng · <span class="kbd">⌘S</span> để lưu</span>
-    </div>
-    ${check && html`<div class="card" style="box-shadow:none"><div class="card-head"><h3>Lục bát</h3><span class=${"pill " + (issues ? "warn" : "ok")}>${issues ? `${issues} dòng cần xem` : "Ổn"}</span></div>
-      <div style="max-height:320px;overflow:auto"><table class="table"><thead><tr><th>#</th><th>Lời</th><th>Chữ</th><th>Ghi chú</th></tr></thead><tbody>
+    <div class="section-title"><${Icon} name="type" /><h3>Lời bài hát</h3><span class="spacer"></span>
+      <${Btn} size="sm" icon="check" onClick=${runCheck}>Kiểm tra lục bát</${Btn}></div>
+    <textarea class="textarea" rows="12" value=${text} onInput=${(e) => setText(e.target.value)} onKeyDown=${(e) => (e.metaKey || e.ctrlKey) && e.key === "s" && (e.preventDefault(), saveAll())}></textarea>
+    ${check && html`<div class="card flat"><div class="card-head"><h3>Lục bát</h3><span class=${"pill " + (issues ? "warn" : "ok")}>${issues ? `${issues} dòng cần xem` : "Ổn"}</span></div>
+      <div class="scroll-x" style="max-height:320px"><table class="table"><thead><tr><th>#</th><th>Lời</th><th>Chữ</th><th>Ghi chú</th></tr></thead><tbody>
       ${check.map((r) => html`<tr><td class="num">${r.line}</td><td>${r.text}</td><td class="num">${r.syllables} · ${r.kind}</td>
         <td class="small">${r.notes.length ? r.notes.map((n) => html`<div class=${n.startsWith("có tiếng đệm") ? "muted" : ""}>${n}</div>`) : html`<span class="pill ok">ok</span>`}</td></tr>`)}
       </tbody></table></div></div>`}
-    <${AgentAction} slug=${slug} action="lyrics.agent" title="Soát lời, chia đoạn, viết Styles"
-      hint="Agent sửa tên, dấu, dấu câu; chia Verse/Chorus; ghi suno/lyrics.txt, suno/style.txt và notes.md"
-      body=${{ profile, fixAll }}
-      extra=${html`<div class="row wrap" style="gap:16px">
-        <span class="small muted">Kiểu phối</span>
-        ${d.profile ? html`<a class="pill accent" href=${`#/p/${slug}/ref`}><${Icon} name="wand" size=${11} /> Riêng của bài này (bước 0)</a>`
-          : html`<${Seg} value=${profile} onChange=${setProfile} options=${[{ value: "B", label: "B · Trữ tình (Hạ Long)" }, { value: "A", label: "A · Pop ballad (Làng chung cư)" }]} />`}
-        <${Switch} on=${fixAll} onChange=${setFixAll}>Sửa hết đề xuất cấu trúc</${Switch}>
-      </div>`} />
+
+    <div class="section-title"><${Icon} name="music" /><h3>Bài mẫu</h3><span class="muted small">không bắt buộc · chỉ học phong cách, không gửi lên Suno</span></div>
+    <${RefsPanel} d=${d} slug=${slug} reload=${reload} stamp=${stamp} />
+
+    <div class="section-title"><${Icon} name="wand" /><h3>Yêu cầu mở rộng</h3><span class="muted small">không bắt buộc</span></div>
+    <textarea class="textarea" rows="4" placeholder="Ví dụ: phong cách dân ca mượt mà nhưng không ề à, không dùng bộ gõ…" value=${brief}
+      onInput=${(e) => setBrief(e.target.value)} onKeyDown=${(e) => (e.metaKey || e.ctrlKey) && e.key === "s" && (e.preventDefault(), saveAll())}></textarea>
+    <${PresetChips} value=${brief} onChange=${setBrief} />
+
+    <div class="cta">
+      <div class="cta-fields">
+        <label class="field"><span>Kiểu phối</span><${ProfileSelect} value=${profile} onChange=${setProfile} /></label>
+        <label class="field"><span>Agent</span><${AgentPicker} value=${ag.agent} onChange=${ag.setAgent} model=${ag.model} onModel=${ag.setModel} /></label>
+        <${Switch} on=${fixAll} onChange=${setFixAll}>Sửa hết đề xuất cấu trúc lời</${Switch}>
+      </div>
+      <div class="cta-go">
+        <div class="muted small">${d.refs.some((r) => !r.analysis) ? "Phân tích bài mẫu ‖ soát lời & chia đoạn → phối khí & Styles" : "Soát lời & chia đoạn → phối khí & Styles"}</div>
+        <div class="row wrap">
+          ${dirty && html`<${Btn} icon="save" busy=${busy} onClick=${saveAll}>Lưu</${Btn}>`}
+          <${Btn} kind="primary" icon="sparkles" busy=${starting} disabled=${!text.trim() || chainRunning} onClick=${generate}>${chainRunning ? "Đang tạo prompt…" : "Tạo prompt Suno"}</${Btn}>
+        </div>
+      </div>
+    </div>
   </div>`;
 }
 
@@ -243,7 +333,7 @@ function CopyBlock({ title, text, extra, onSave, saving }) {
   const [val, setVal] = useState(text);
   useEffect(() => setVal(text), [text]);
   return html`<div class="stack" style="gap:8px">
-    <div class="row"><h3>${title}</h3>${extra}<span class="spacer"></span>
+    <div class="row wrap"><h3>${title}</h3>${extra}<span class="spacer"></span>
       ${onSave && html`<${Btn} size="sm" kind="ghost" icon=${edit ? "x" : "code"} onClick=${() => setEdit(!edit)}>${edit ? "Huỷ" : "Sửa"}</${Btn}>`}
       ${edit ? html`<${Btn} size="sm" icon="save" busy=${saving} onClick=${async () => { await onSave(val); setEdit(false); }}>Lưu</${Btn}>`
         : html`<${Btn} size="sm" icon="copy" onClick=${() => copyText(text)}>Chép</${Btn}>`}</div>
@@ -253,19 +343,26 @@ function CopyBlock({ title, text, extra, onSave, saving }) {
 
 function SunoStep({ d, slug, reload }) {
   const [busy, save] = useSave(slug, reload);
+  const [profileName, setProfileName] = useState("");
   const cfg = safeJSON(d.config);
-  if (!d.sunoLyrics && !d.sunoStyle) {
-    return html`<${Empty} icon="sparkles" title="Chưa có prompt Suno">Chạy bước <a href=${`#/p/${slug}/lyrics`} style="color:var(--accent)">Lời bài hát</a> để agent chia đoạn và viết Styles.</${Empty}>`;
-  }
-  const n = [...d.sunoStyle.trim()].length;
+  const n = [...(d.sunoStyle || "").trim()].length;
+  const empty = !d.sunoLyrics && !d.sunoStyle;
   return html`<div class="stack">
-    <dl class="kv"><dt>Tên bài</dt><dd><b>${[cfg.title, cfg.subtitle].filter(Boolean).join(" ")}</b></dd><dt>Giọng</dt><dd>${cfg.vocal || "—"}</dd><dt>Kiểu phối</dt><dd>${cfg.profile || "—"}</dd></dl>
-    <${CopyBlock} title="Styles" text=${d.sunoStyle.trim()} extra=${html`<span class=${"pill " + (n > 1000 ? "bad" : "ok")}>${n}/1000</span>`} saving=${busy} onSave=${(v) => save("suno/style.txt", v)} />
-    <${CopyBlock} title="Lyrics" text=${d.sunoLyrics.trim()} saving=${busy} onSave=${(v) => save("suno/lyrics.txt", v)} />
-    ${d.notes && html`<div><h3 style="margin-bottom:8px">Ghi chú của agent</h3><div class="bubble"><${Markdown} text=${d.notes} /></div></div>`}
-    <${AgentAction} slug=${slug} action="suno.agent" title="Điền form suno.com/create" hint="Agent dùng CUA điều khiển Chrome; không bấm Create, bạn tự xem và bấm" />
-    <div class="row"><${Btn} icon="external" onClick=${() => window.open("https://suno.com/create", "_blank", "noopener")}>Mở Suno</${Btn}>
-      <span class="muted small">Tạo xong, tải bản <b>M4A</b> (có sẵn timing lời) rồi sang bước Nhạc.</span></div>
+    <${ChainStatus} slug=${slug} steps=${["lyrics", "suno"]} title="Chuỗi tạo prompt" />
+    ${empty ? html`<${Empty} icon="sparkles" title="Chưa có prompt Suno">Ở <a href=${`#/p/${slug}/lyrics`} style="color:var(--accent)">bước 1</a>, thêm lời (và bài mẫu, yêu cầu nếu có) rồi bấm <b>Tạo prompt Suno</b>.</${Empty}>` : html`
+      <dl class="kv"><dt>Tên bài</dt><dd><b>${[cfg.title, cfg.subtitle].filter(Boolean).join(" ")}</b></dd><dt>Giọng</dt><dd>${cfg.vocal || "—"}</dd><dt>Kiểu phối</dt><dd>${cfg.profile || "—"}</dd></dl>
+      <${CopyBlock} title="Styles" text=${(d.sunoStyle || "").trim()} extra=${html`<span class=${"pill " + (n > 1000 ? "bad" : "ok")}>${n}/1000</span>`} saving=${busy} onSave=${(v) => save("suno/style.txt", v)} />
+      <${CopyBlock} title="Lyrics" text=${(d.sunoLyrics || "").trim()} saving=${busy} onSave=${(v) => save("suno/lyrics.txt", v)} />
+      ${d.profile && html`<details open><summary class="section-title" style="cursor:pointer"><${Icon} name="wand" /><h3>Vì sao phối như vậy</h3></summary><div class="bubble" style="margin-top:8px"><${Markdown} text=${d.profile} /></div></details>`}
+      ${d.notes && html`<details><summary class="section-title" style="cursor:pointer"><${Icon} name="file" /><h3>Ghi chú soát lời</h3></summary><div class="bubble" style="margin-top:8px"><${Markdown} text=${d.notes} /></div></details>`}
+      <${AgentAction} slug=${slug} action="suno.agent" title="Điền form suno.com/create" hint="Agent dùng CUA điều khiển Chrome; không bấm Create, bạn tự xem và bấm" />
+      <div class="row wrap"><${Btn} icon="external" onClick=${() => window.open("https://suno.com/create", "_blank", "noopener")}>Mở Suno</${Btn}>
+        <span class="muted small">Tạo xong, tải bản <b>M4A</b> (có sẵn timing lời) rồi sang bước Nhạc.</span></div>
+      <div class="action-bar"><div class="grow" style="min-width:200px"><div class="row" style="gap:8px"><${Icon} name="save" size=${15} /><b>Lưu kiểu phối này vào skill</b></div>
+        <div class="muted small">Thành profile mới trong skill, chọn lại được cho các bài sau</div></div>
+        <input class="input" style="max-width:220px" placeholder="tên, ví dụ Dân ca mượt" value=${profileName} onInput=${(e) => setProfileName(e.target.value)} />
+        <${Btn} icon="send" disabled=${!d.profile} onClick=${() => runAction(slug, "ref.save.agent", { note: profileName ? "Tên profile: " + profileName : "" })}>Lưu vào skill</${Btn}></div>
+    `}
   </div>`;
 }
 
@@ -289,6 +386,8 @@ function AudioStep({ d, slug, reload, stamp }) {
   };
   return html`<div class="stack">
     ${d.audio && html`<div><div class="row" style="margin-bottom:8px"><${Icon} name="music" /><b>${d.audio}</b></div><audio controls preload="metadata" src=${media(slug, d.audio, stamp)}></audio></div>`}
+    ${d.audio && !stepDone(d, "render") && html`<${VideoCTA} d=${d} slug=${slug} />`}
+    ${d.audio && html`<div class="muted small">Muốn đổi bản nhạc khác? Kéo file mới vào bên dưới.</div>`}
     <div class=${"dropzone" + (over ? " over" : "")} onDragOver=${(e) => { e.preventDefault(); setOver(true); }} onDragLeave=${() => setOver(false)}
       onDrop=${(e) => { e.preventDefault(); setOver(false); const f = e.dataTransfer.files[0]; f && upload(f); }}>
       <${Icon} name="upload" size=${24} /><div style="margin:8px 0 4px;font-weight:600">Kéo file M4A từ Suno vào đây</div>
@@ -307,7 +406,7 @@ function AlignStep({ d, slug }) {
   return html`<div class="stack">
     <${ActionCard} title="Canh lời từng chữ" hint="Lấy phụ đề Suno trong M4A, tách giọng bằng Demucs, Whisper canh từng chữ rồi khớp theo giọng thật" onRun=${() => runAction(slug, "align")} label="Canh lời" />
     ${!d.audio && html`<div class="warn-box">Cần thêm file nhạc ở bước 3 trước.</div>`}
-    ${d.timings.length > 0 && html`<div style="max-height:460px;overflow:auto"><table class="table"><thead><tr><th>#</th><th>Bắt đầu</th><th>Kết thúc</th><th>Lệch Suno</th><th>Lời</th></tr></thead><tbody>
+    ${d.timings.length > 0 && html`<div class="scroll-x" style="max-height:460px"><table class="table"><thead><tr><th>#</th><th>Bắt đầu</th><th>Kết thúc</th><th>Lệch Suno</th><th>Lời</th></tr></thead><tbody>
       ${d.timings.map((l, i) => html`<tr><td class="num">${i + 1}</td><td class="num">${secs(l.start)}</td><td class="num">${secs(l.end)}</td>
         <td class="num">${Math.abs(l.drift) > 1 ? html`<span class="pill warn">${l.drift.toFixed(2)}s</span>` : l.drift.toFixed(2) + "s"}${l.source === "even" ? html` <span class="pill warn">chia đều</span>` : ""}</td><td>${l.text}</td></tr>`)}
     </tbody></table></div>`}
@@ -339,7 +438,7 @@ function ScenesStep({ d, slug, reload, stamp }) {
     <${AgentAction} slug=${slug} action="scenes.agent" title="Lên danh sách cảnh theo lời" hint="Ghi scenes vào project.json: mỗi cảnh đổi ở đầu một câu, prompt tiếng Anh nêu đúng địa danh" />
     <${ActionCard} title="Tạo ảnh còn thiếu" hint=${`Model ${cfg.image_model || "gpt-image-2.5"} · 4 ảnh song song · ảnh đã có được giữ, xoá file để tạo lại`} onRun=${() => runAction(slug, "images")} label="Tạo ảnh" icon="image" />
     <div class="row"><h3>${scenes.length} cảnh</h3><span class="spacer"></span><${Btn} size="sm" icon="code" onClick=${() => setEditing(true)}>Sửa project.json</${Btn}></div>
-    ${scenes.length > 0 && html`<div style="max-height:380px;overflow:auto"><table class="table"><thead><tr><th>Bắt đầu</th><th>Cảnh</th><th>Prompt</th><th></th></tr></thead><tbody>
+    ${scenes.length > 0 && html`<div class="scroll-x" style="max-height:380px"><table class="table"><thead><tr><th>Bắt đầu</th><th>Cảnh</th><th>Prompt</th><th></th></tr></thead><tbody>
       ${scenes.map((s) => { const img = `img/${s.id}.png`; return html`<tr><td class="num">${secs(s.start)}</td><td class="mono small">${s.id}</td>
         <td class="small">${s.reuse ? html`<span class="muted">dùng lại ảnh tựa đề</span>` : (s.prompt || "").slice(0, 160)}</td>
         <td>${imgs.has(img) ? html`<img src=${media(slug, img, stamp)} style="width:72px;border-radius:6px;cursor:zoom-in" onClick=${() => setBox(img)} />` : s.reuse ? "" : html`<span class="pill">chưa có</span>`}</td></tr>`; })}
@@ -383,8 +482,10 @@ function RenderStep({ d, slug, stamp }) {
     ${video ? html`<video controls preload="metadata" src=${media(slug, video, stamp)}></video>
       <div class="row wrap"><b class="grow">${video}</b><${Btn} size="sm" icon="play" onClick=${() => open(false)}>Mở bằng QuickTime</${Btn}><${Btn} size="sm" icon="folder" onClick=${() => open(true)}>Hiện trong Finder</${Btn}></div>`
       : html`<${Empty} icon="film" title="Chưa có video">Xuất video sau khi đã xem trước khung hình.</${Empty}>`}
-    <${ActionCard} title="Xuất video karaoke" hint="1920×1080, 30 fps, H.264 + AAC. Khoảng 8–9 phút cho bài 4 phút; máy chỉ chạy 1 việc nặng một lúc" onRun=${() => runAction(slug, "render")} label="Xuất video" icon="film" />
-    <${AgentAction} slug=${slug} action="autopilot.agent" title="Để agent làm nốt mọi bước video" hint="Canh lời → cắt intro nếu cần → cảnh → ảnh → xem trước → xuất, tự kiểm tra khung hình" />
+    <${ChainStatus} slug=${slug} steps=${["align", "trim", "scenes", "stills", "render"]} title="Chuỗi video" />
+    ${!d.audio && html`<div class="warn-box">Chưa có nhạc. Thêm file M4A từ Suno ở <a href=${`#/p/${slug}/audio`} style="color:inherit;text-decoration:underline">bước 3</a> trước.</div>`}
+    <${ActionCard} agent title="Làm video tự động" hint="Canh lời → cắt intro nếu cần → agent lên cảnh → tạo ảnh còn thiếu → khung xem trước → xuất video. Canh lời, cắt intro và lên cảnh được bỏ qua khi đã làm và vẫn còn đúng" busy=${d.steps.some((s) => s.status === "running")} onRun=${() => runPipeline(slug, "video")} label="Chạy cả chuỗi" icon="zap" />
+    <${ActionCard} title="Chỉ xuất video" hint="1920×1080, 30 fps, H.264 + AAC. Khoảng 8–9 phút cho bài 4 phút" onRun=${() => runAction(slug, "render")} label="Xuất video" icon="film" />
   </div>`;
 }
 
@@ -410,7 +511,7 @@ function FreeAgentButton({ slug }) {
       openRun(meta.id); bumpRuns(); setOpen(false); setPrompt("");
     } catch (e) { toastError(e); }
   };
-  return html`<${Btn} size="sm" kind="primary" icon="bot" onClick=${() => setOpen(true)}>Giao việc cho agent</${Btn}>
+  return html`<${Btn} size="sm" icon="bot" onClick=${() => setOpen(true)}>Giao việc cho agent</${Btn}>
     ${open && html`<${Modal} title="Giao việc tự do cho agent" onClose=${() => setOpen(false)} footer=${html`<${Btn} kind="ghost" onClick=${() => setOpen(false)}>Huỷ</${Btn}>
       <${Btn} kind="primary" icon="send" disabled=${!prompt.trim()} onClick=${send}>Gửi</${Btn}>`}>
       <div class="stack"><${AgentPicker} value=${ag.agent} onChange=${ag.setAgent} model=${ag.model} onModel=${ag.setModel} />

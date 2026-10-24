@@ -87,7 +87,7 @@ function Ev({ e }) {
     case "tool_call": {
       const r = e.result;
       return html`<div class=${"ev tool" + (r?.error ? " err" : "")}><div class="ev-icon"><${Icon} name="wrench" size=${14} /></div><div class="ev-body">
-        ${label("wrench", e.tool || "tool", !r ? html`<span class="pill run"><span class="dot"></span>đang chạy</span>` : r.error ? html`<span class="pill bad">lỗi</span>` : null)}
+        ${label("wrench", e.tool || "tool", html`${e.title && html`<span class="ellipsis" style="max-width:60%">${e.title}</span>`}${!r ? html`<span class="pill run"><span class="dot"></span>đang chạy</span>` : r.error ? html`<span class="pill bad">lỗi</span>` : null}`)}
         <div class="tool-card">${e.body && html`<div class="tool-cmd">${e.body}</div>`}
           ${r && html`<details class=${"tool-out" + (r.error ? " err" : "")} open=${r.error}>
             <summary><${Icon} name="chevron" size=${12} />${r.body ? `Kết quả · ${r.body.split("\n").length} dòng` : "Không có đầu ra"}</summary>
@@ -119,6 +119,33 @@ function Thinking({ e }) {
   return html`<div class="ev"><div class="ev-icon"><${Icon} name="brain" size=${14} /></div><div class="ev-body">
     <div class="ev-label"><b>Suy nghĩ</b><span class="muted">${open ? "bấm để thu gọn" : "bấm để mở"}</span></div>
     <div class=${"thinking" + (open ? " open" : "")} onClick=${() => setOpen(!open)}>${e.body}</div></div></div>`;
+}
+
+function ChainBar({ group, current, follow }) {
+  const [chain, setChain] = useState([]);
+  const prev = useRef(null);
+  useEffect(() => {
+    setChain([]);
+    if (!group) return;
+    let stop = false;
+    const load = () => api(`/api/groups/${encodeURIComponent(group)}`).then((c) => !stop && setChain(c)).catch(() => {});
+    load();
+    const t = setInterval(load, 2000);
+    return () => { stop = true; clearInterval(t); };
+  }, [group]);
+  useEffect(() => {
+    // follow only when the run being watched finishes and the chain moves on; a link the user picked stays
+    const me = chain.find((r) => r.id === current);
+    const was = prev.current;
+    prev.current = me ? me.status : null;
+    if (!follow || !me || was !== "running" || me.status !== "succeeded") return;
+    const live = chain.find((r) => r.status === "running");
+    if (live && live.id !== current) store.set({ consoleRun: live.id });
+  }, [chain, current]);
+  if (chain.length < 2) return null;
+  return html`<div class="chain tight">${chain.map((r, i) => html`${i > 0 && html`<${Icon} name="chevron" size=${11} class="muted" />`}
+    <button type="button" class=${"chain-step" + (r.id === current ? " on" : "")} onClick=${() => store.set({ consoleRun: r.id })} title=${r.title}>
+      <${AgentIcon} agent=${r.kind === "agent" ? r.agent : "script"} /><span>${r.title}</span><${StatusPill} status=${r.status} /></button>`)}</div>`;
 }
 
 export function RunView({ id, compact, onClose }) {
@@ -164,6 +191,7 @@ export function RunView({ id, compact, onClose }) {
         ${meta.exitCode != null && !active(meta.status) ? html`<span>mã thoát <b>${meta.exitCode}</b></span>` : null}
         ${meta.prompt && html`<a style="cursor:pointer;color:var(--accent)" onClick=${() => setShowPrompt(!showPrompt)}>${showPrompt ? "ẩn prompt" : "xem prompt"}</a>`}
       </div>
+      <${ChainBar} group=${meta.group} current=${id} follow=${!!compact} />
       ${showPrompt && html`<pre class="block" style="max-height:220px">${meta.prompt}</pre>`}
     </div>
     <div class="timeline" ref=${box} onScroll=${(e) => { const el = e.currentTarget; stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 60; }}>

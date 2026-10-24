@@ -1,5 +1,5 @@
 // App shell: sidebar navigation, system meter, routing, run drawer and toasts.
-import { html, render, useEffect, api, store, useStore, useRoute, theme, toastError } from "./core.js";
+import { html, render, useEffect, useErrorBoundary, api, store, useStore, useRoute, theme, toastError } from "./core.js";
 import { Icon } from "./icons.js";
 import { Toasts, Btn } from "./ui.js";
 import { Drawer } from "./console.js";
@@ -26,8 +26,8 @@ function Sidebar({ route }) {
   const ratio = Math.min(1, load / cpus);
   return html`<nav class="sidebar">
     <div class="brand"><div class="brand-mark"><${Icon} name="lotus" size=${20} stroke=${2.2} /></div>
-      <div><div class="brand-name">Quê Hương Studio</div><div class="brand-sub">Lời → Suno → Video</div></div></div>
-    ${nav.map((n) => html`<a class=${"nav-item" + (n.on ? " active" : "")} href=${n.href}><${Icon} name=${n.icon} size=${17} />${n.label}
+      <div class="brand-text"><div class="brand-name">Quê Hương Studio</div><div class="brand-sub">Lời → Suno → Video</div></div></div>
+    ${nav.map((n) => html`<a class=${"nav-item" + (n.on ? " active" : "")} href=${n.href} title=${n.label}><${Icon} name=${n.icon} size=${17} /><span class="nav-label">${n.label}</span>
       ${n.badge ? html`<span class="nav-badge">${n.badge}</span>` : null}</a>`)}
     <div class="sidebar-foot">
       <div class="meter" title="Tải trung bình 1 phút so với số nhân CPU">
@@ -67,6 +67,15 @@ function UpdateBanner() {
     <${Btn} size="sm" kind="primary" onClick=${() => location.reload()}>Tải lại</${Btn}></div>`;
 }
 
+// Boundary keeps one broken view from taking the whole app down.
+function Boundary({ children, resetKey }) {
+  const [err, reset] = useErrorBoundary((e) => console.error(e));
+  useEffect(() => { if (err) reset(); }, [resetKey]);
+  if (err) return html`<div class="page"><div class="warn-box">Trang này gặp lỗi: ${String(err.message || err)}.
+    <a style="text-decoration:underline;cursor:pointer;margin-left:8px" onClick=${reset}>Thử lại</a></div></div>`;
+  return children;
+}
+
 function App() {
   const route = useRoute();
   const consoleRun = useStore((s) => s.consoleRun);
@@ -93,7 +102,7 @@ function App() {
   }
   return html`<div class=${"shell" + (consoleRun ? " with-drawer" : "")}>
     <${Sidebar} route=${route} />
-    <main class="main">${boot && !boot.skillExists ? html`<div class="page"><div class="warn-box">Không thấy skill ở ${boot.config.skillDir}. Sửa đường dẫn trong Cài đặt.</div></div>` : null}${page}</main>
+    <main class="main">${boot && !boot.skillExists ? html`<div class="page"><div class="warn-box">Không thấy skill ở ${boot.config.skillDir}. Sửa đường dẫn trong Cài đặt.</div></div>` : null}<${Boundary} resetKey=${route.join("/")}>${page}</${Boundary}></main>
     <${Drawer} />
     <${Toasts} />
     <${UpdateBanner} />

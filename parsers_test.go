@@ -131,3 +131,14 @@ func TestSummarizeInput(t *testing.T) {
 		}
 	}
 }
+
+func TestOmpToolCallReadable(t *testing.T) {
+	tool, title, body := ompToolCall("write", []byte(`{"i":"Opening Suno creation page","path":"xd://mcp__cua_repl_js","content":"{\"code\":\"await app.pressKey('super+t');\",\"title\":\"Mở tab Suno\"}"}`))
+	if tool != "CUA" || title != "Opening Suno creation page" || body != "Mở tab Suno\nawait app.pressKey('super+t');" {
+		t.Fatalf("got %q %q %q", tool, title, body)
+	}
+	tool, title, body = ompToolCall("bash", []byte(`{"i":"Running echo","command":"echo hi"}`))
+	if tool != "bash" || title != "Running echo" || body != "echo hi" {
+		t.Fatalf("got %q %q %q", tool, title, body)
+	}
+}

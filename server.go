@@ -74,6 +74,9 @@ func (a *App) routes() http.Handler {
 	mux.HandleFunc("DELETE /api/projects/{slug}/refs/{name}", a.removeRef)
 	mux.HandleFunc("GET /api/projects/{slug}/lucbat", a.lucbat)
 	mux.HandleFunc("POST /api/projects/{slug}/actions/{action}", a.projectAction)
+	mux.HandleFunc("POST /api/projects/{slug}/pipeline/{name}", a.projectPipeline)
+	mux.HandleFunc("GET /api/groups/{group}", a.runGroup)
+	mux.HandleFunc("GET /api/skill/profiles", a.profiles)
 	mux.HandleFunc("POST /api/projects/{slug}/open", a.openInFinder)
 	mux.HandleFunc("GET /media/{slug}/{path...}", a.media)
 	mux.HandleFunc("GET /api/downloads/audio", a.recentDownloads)
@@ -164,7 +167,7 @@ func (a *App) health(w http.ResponseWriter, r *http.Request) {
 func (a *App) bootstrap(w http.ResponseWriter, r *http.Request) {
 	cfg := a.cfg.Get()
 	writeJSON(w, 200, map[string]any{
-		"version": a.version, "config": cfg, "agents": agentInfos(cfg), "actions": workflowActions,
+		"version": a.version, "config": cfg, "agents": agentInfos(cfg), "actions": workflowActions, "profiles": skillProfiles(cfg.SkillDir),
 		"skillExists": exists(filepath.Join(cfg.SkillDir, "SKILL.md")),
 	})
 }
@@ -451,18 +454,13 @@ func (a *App) projectAction(w http.ResponseWriter, r *http.Request) {
 		failFor(w, err)
 		return
 	}
-	var act *Action
-	for i := range workflowActions {
-		if workflowActions[i].ID == action {
-			act = &workflowActions[i]
-		}
-	}
+	act := findAction(action)
 	if act == nil {
 		fail(w, 404, fmt.Errorf("unknown action %q", action))
 		return
 	}
 	cfg := a.cfg.Get()
-	spec := RunSpec{Kind: act.Kind, Step: act.Step, Project: slug, Cwd: cfg.SkillDir}
+	spec := RunSpec{Kind: act.Kind, Step: act.Step, Project: slug, Cwd: cfg.SkillDir, Heavy: act.Heavy}
 	if act.Kind == "agent" {
 		agent := req.Agent
 		if agent == "" {
@@ -500,6 +498,49 @@ func (a *App) projectAction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, 202, meta)
+}
+
+// projectPipeline queues a chain of runs; independent links start in parallel.
+func (a *App) projectPipeline(w http.ResponseWriter, r *http.Request) {
+	slug := r.PathValue("slug")
+	var req ActionRequest
+	if r.ContentLength != 0 {
+		if err := decode(r, &req); err != nil {
+			failFor(w, err)
+			return
+		}
+	}
+	d, err := a.detail(slug)
+	if err != nil {
+		failFor(w, err)
+		return
+	}
+	specs, deps, err := pipelineSpecs(r.PathValue("name"), a.cfg.Get(), d, req)
+	if err != nil {
+		failFor(w, err)
+		return
+	}
+	active := a.runs.ActiveFor(slug)
+	for _, s := range specs {
+		if id, busy := active[s.Step]; busy {
+			fail(w, http.StatusConflict, fmt.Errorf("bài này đang có việc chạy ở bước %q (%s); đợi xong hoặc dừng nó trước", s.Step, id))
+			return
+		}
+	}
+	metas, err := a.runs.SubmitChain(specs, deps)
+	if err != nil {
+		failFor(w, err)
+		return
+	}
+	writeJSON(w, 202, metas)
+}
+
+func (a *App) runGroup(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, 200, a.runs.Group(r.PathValue("group")))
+}
+
+func (a *App) profiles(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, 200, skillProfiles(a.cfg.Get().SkillDir))
 }
 
 func (a *App) openInFinder(w http.ResponseWriter, r *http.Request) {

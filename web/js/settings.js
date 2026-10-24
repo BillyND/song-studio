@@ -9,8 +9,8 @@ export function SettingsPage() {
   const [busy, setBusy] = useState(false);
   useEffect(() => { if (boot) setCfg(JSON.parse(JSON.stringify(boot.config))); }, [boot]);
   if (!cfg) return null;
-  const set = (k, v) => setCfg({ ...cfg, [k]: v });
-  const setAgent = (name, k, v) => setCfg({ ...cfg, agents: { ...cfg.agents, [name]: { ...cfg.agents[name], [k]: v } } });
+  const set = (k, v) => setCfg((c) => ({ ...c, [k]: v }));
+  const setAgent = (name, k, v) => setCfg((c) => ({ ...c, agents: { ...c.agents, [name]: { ...c.agents[name], [k]: v } } }));
   const save = async () => {
     setBusy(true);
     try {
@@ -28,16 +28,27 @@ export function SettingsPage() {
         <${Field} label="Agent mặc định"><${Seg} value=${cfg.defaultAgent} onChange=${(v) => set("defaultAgent", v)} options=${["claude", "omp", "codex"].map((n) => ({ value: n, label: n }))} /></${Field}>
         <${Field} label="Quyền của agent" hint="Agent chạy không có người duyệt nên không hỏi xin quyền được. 'Toàn quyền' giống cách bạn đang dùng (--dangerously-skip-permissions). 'Chỉ sửa file' an toàn hơn nhưng agent không chạy được script.">
           <${Seg} value=${cfg.permissionMode} onChange=${(v) => set("permissionMode", v)} options=${[{ value: "full", label: "Toàn quyền", icon: "zap" }, { value: "edits", label: "Chỉ sửa file", icon: "shield" }]} /></${Field}>
-        <${Field} label="Số việc chạy cùng lúc" hint="Máy hay bị quá tải, nên mặc định 1: việc khác xếp hàng chờ.">
-          <${Seg} value=${String(cfg.maxConcurrent)} onChange=${(v) => set("maxConcurrent", Number(v))} options=${["1", "2", "3"].map((n) => ({ value: n, label: n }))} /></${Field}>
+        <div class="form-row">
+          <${Field} label="Việc nặng cùng lúc" hint="Tách giọng, canh lời, phân tích, render. Máy hay quá tải nên để 1.">
+            <${Seg} value=${String(cfg.maxConcurrent)} onChange=${(v) => set("maxConcurrent", Number(v))} options=${["1", "2", "3"].map((n) => ({ value: n, label: n }))} /></${Field}>
+          <${Field} label="Agent chạy song song" hint="Agent và tạo ảnh chủ yếu chờ API nên chạy song song được.">
+            <${Seg} value=${String(cfg.maxAgents)} onChange=${(v) => set("maxAgents", Number(v))} options=${["1", "2", "3", "4", "6"].map((n) => ({ value: n, label: n }))} /></${Field}>
+        </div>
       </div>
       <div class="card card-pad stack">
         <h2>Coding CLI</h2>
-        ${["claude", "omp", "codex"].map((n) => html`<div class="row" style="gap:12px;align-items:flex-end">
+        ${["claude", "omp", "codex"].map((n) => html`<div class="row wrap" style="gap:12px;align-items:flex-end">
           <div style="width:90px"><b>${n}</b><div class="small ${infos[n]?.available ? "" : "muted"}" style=${{ color: infos[n]?.available ? "var(--ok)" : "" }}>${infos[n]?.available ? infos[n].version || "có" : "không thấy"}</div></div>
           <div class="grow"><${Field} label="Đường dẫn"><input class="input mono" value=${cfg.agents[n]?.bin} onInput=${(e) => setAgent(n, "bin", e.target.value)} /></${Field}></div>
           <div style="width:200px"><${Field} label="Model mặc định"><input class="input" placeholder="theo CLI" value=${cfg.agents[n]?.model} onInput=${(e) => setAgent(n, "model", e.target.value)} /></${Field}></div>
         </div>`)}
+      </div>
+      <div class="card card-pad stack">
+        <h2>Bài mới</h2>
+        <div class="form-row">${(cfg.credits || []).map((c, i) => html`
+          <${Field} label=${"Ghi công " + (i + 1)}><div class="row"><input class="input" style="max-width:120px" value=${c[0]} onInput=${(e) => set("credits", cfg.credits.map((x, j) => (j === i ? [e.target.value, x[1]] : x)))} />
+            <input class="input" placeholder="Tên" value=${c[1]} onInput=${(e) => set("credits", cfg.credits.map((x, j) => (j === i ? [x[0], e.target.value] : x)))} /></div></${Field}>`)}</div>
+        <${Field} label="Model tạo ảnh" hint="Model của hub ảnh OpenAI-compatible, ghi vào project.json khi tạo bài."><input class="input mono" style="max-width:260px" value=${cfg.imageModel} onInput=${(e) => set("imageModel", e.target.value)} /></${Field}>
       </div>
       <div class="card card-pad stack">
         <div class="row"><h2 class="grow">Prompt mở rộng</h2>

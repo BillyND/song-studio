@@ -312,6 +312,39 @@ func (p *codexParser) Line(line string, emit func(Event), u *Usage) {
 
 // ---------- omp: omp -p --mode json ----------
 
+// ompToolCall makes omp tool calls readable. omp sends a plain-language intent in "i", and MCP
+// tools arrive as a write to "xd://mcp__<server>_<tool>" whose content holds the real arguments.
+func ompToolCall(name string, raw json.RawMessage) (tool, title, body string) {
+	tool, body = name, summarizeInput(raw)
+	var args map[string]any
+	if json.Unmarshal(raw, &args) != nil {
+		return
+	}
+	title, _ = args["i"].(string)
+	path, _ := args["path"].(string)
+	if !strings.HasPrefix(path, "xd://") {
+		return
+	}
+	tool = strings.TrimPrefix(strings.TrimPrefix(path, "xd://"), "mcp__")
+	if strings.HasPrefix(tool, "cua_repl") {
+		tool = "CUA"
+	}
+	body = ""
+	content, _ := args["content"].(string)
+	var inner map[string]any
+	if content != "" && json.Unmarshal([]byte(content), &inner) == nil {
+		if t, _ := inner["title"].(string); t != "" {
+			body = t
+		}
+		if code, _ := inner["code"].(string); code != "" {
+			body = strings.TrimSpace(body + "\n" + code)
+		}
+	} else if content != "" {
+		body = content
+	}
+	return tool, title, clip(body)
+}
+
 type ompParser struct{ lastText string }
 
 func (p *ompParser) Line(line string, emit func(Event), u *Usage) {
@@ -381,7 +414,8 @@ func (p *ompParser) Line(line string, emit func(Event), u *Usage) {
 					emit(Event{Kind: "thinking", Body: clip(c.Thinking)})
 				}
 			case "toolCall":
-				emit(Event{Kind: "tool_call", Tool: c.Name, Ref: c.ID, Body: summarizeInput(c.Arguments)})
+				tool, title, body := ompToolCall(c.Name, c.Arguments)
+				emit(Event{Kind: "tool_call", Tool: tool, Ref: c.ID, Title: title, Body: body})
 			}
 		}
 		if m.StopReason == "error" && m.ErrMsg != "" {

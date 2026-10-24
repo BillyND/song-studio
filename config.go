@@ -21,7 +21,10 @@ type Config struct {
 	ProjectsDir    string                 `json:"projectsDir"`
 	DefaultAgent   string                 `json:"defaultAgent"`
 	PermissionMode string                 `json:"permissionMode"` // "full" or "edits"
-	MaxConcurrent  int                    `json:"maxConcurrent"`
+	MaxConcurrent  int                    `json:"maxConcurrent"`  // heavy jobs at once (CPU-bound scripts)
+	MaxAgents      int                    `json:"maxAgents"`      // light jobs at once (agents, image downloads)
+	Credits        [][2]string            `json:"credits"`        // prefilled on new songs
+	ImageModel     string                 `json:"imageModel"`
 	Agents         map[string]AgentConfig `json:"agents"`
 	Presets        []Preset               `json:"presets"`
 }
@@ -52,6 +55,9 @@ func defaultConfig(home string) Config {
 		DefaultAgent:   "claude",
 		PermissionMode: "full",
 		MaxConcurrent:  1,
+		MaxAgents:      3,
+		Credits:        [][2]string{{"Sáng tác: ", ""}, {"Phổ nhạc: ", ""}},
+		ImageModel:     "gpt-image-2.5",
 		Presets:        defaultPresets,
 		Agents: map[string]AgentConfig{
 			"claude": {Bin: firstExisting("/opt/homebrew/bin/claude", "claude"), Model: ""},
@@ -114,6 +120,18 @@ func normalizeConfig(cfg *Config, home string) {
 	}
 	if cfg.MaxConcurrent > 4 {
 		cfg.MaxConcurrent = 4
+	}
+	if cfg.MaxAgents < 1 {
+		cfg.MaxAgents = def.MaxAgents
+	}
+	if cfg.MaxAgents > 6 {
+		cfg.MaxAgents = 6
+	}
+	if len(cfg.Credits) == 0 {
+		cfg.Credits = def.Credits
+	}
+	if cfg.ImageModel == "" {
+		cfg.ImageModel = def.ImageModel
 	}
 	if cfg.Agents == nil {
 		cfg.Agents = map[string]AgentConfig{}

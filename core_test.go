@@ -179,7 +179,7 @@ func waitStatus(t *testing.T, m *Manager, id string, want ...string) RunMeta {
 
 func TestRunLifecycle(t *testing.T) {
 	data := t.TempDir()
-	m, err := newManager(data, func() int { return 1 })
+	m, err := newManager(data, func() (int, int) { return 1, 1 })
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -221,7 +221,7 @@ func TestRunLifecycle(t *testing.T) {
 	m.Shutdown(time.Second)
 
 	// a fresh manager reloads history
-	m2, _ := newManager(data, func() int { return 1 })
+	m2, _ := newManager(data, func() (int, int) { return 1, 1 })
 	if len(m2.List(10)) != 3 {
 		t.Fatalf("history not reloaded: %d", len(m2.List(10)))
 	}
@@ -234,7 +234,7 @@ func TestRunLifecycle(t *testing.T) {
 
 func TestFailedRun(t *testing.T) {
 	data := t.TempDir()
-	m, _ := newManager(data, func() int { return 2 })
+	m, _ := newManager(data, func() (int, int) { return 2, 2 })
 	defer m.Shutdown(time.Second)
 	r, _ := m.Submit(RunSpec{Kind: "script", Cwd: data, Argv: []string{"/bin/sh", "-c", "exit 3"}})
 	meta := waitStatus(t, m, r.ID, "failed")
@@ -243,19 +243,6 @@ func TestFailedRun(t *testing.T) {
 	}
 	if _, err := m.Submit(RunSpec{Kind: "script", Cwd: "/nonexistent", Argv: []string{"true"}}); err == nil {
 		t.Fatal("missing cwd accepted")
-	}
-}
-
-func TestDefaultStillTimes(t *testing.T) {
-	d := ProjectDetail{Timings: []TimingLine{{Text: "a", Start: 11.8, End: 15}, {Text: "long line here", Start: 16, End: 20}, {Text: "b", Start: 40, End: 44}}}
-	got := defaultStillTimes(d)
-	if len(got) < 4 || got[0] != 3 {
-		t.Fatalf("times %v", got)
-	}
-	for i := 1; i < len(got); i++ {
-		if got[i] <= got[i-1] {
-			t.Fatalf("not increasing %v", got)
-		}
 	}
 }
 
@@ -305,7 +292,7 @@ func TestVideoStampsDriveStaleness(t *testing.T) {
 // Subscribing and cancelling while a run streams must never panic (send on closed channel).
 func TestSubscribeCancelWhileStreaming(t *testing.T) {
 	data := t.TempDir()
-	m, _ := newManager(data, func() int { return 1 })
+	m, _ := newManager(data, func() (int, int) { return 1, 1 })
 	defer m.Shutdown(time.Second)
 	r, _ := m.Submit(RunSpec{Kind: "script", Cwd: data, Argv: []string{"/bin/sh", "-c", "i=0; while [ $i -lt 3000 ]; do echo line $i; echo err $i 1>&2; i=$((i+1)); done"}})
 	run, _ := m.Get(r.ID)
@@ -343,7 +330,7 @@ func TestSubscribeCancelWhileStreaming(t *testing.T) {
 // A background child that keeps stdout open must not hold the run (and the queue) forever.
 func TestDetachedChildDoesNotHangRun(t *testing.T) {
 	data := t.TempDir()
-	m, _ := newManager(data, func() int { return 1 })
+	m, _ := newManager(data, func() (int, int) { return 1, 1 })
 	defer m.Shutdown(time.Second)
 	start := time.Now()
 	r, _ := m.Submit(RunSpec{Kind: "script", Cwd: data, Argv: []string{"/bin/sh", "-c", "sleep 8 & echo started"}})
@@ -386,5 +373,328 @@ func TestSafeFileNameAndVideos(t *testing.T) {
 	got := karaokeVideos(dir, filepath.Join(dir, "Song.mp4"))
 	if len(got) != 1 || got[0] != "Song - Karaoke.mp4" {
 		t.Fatalf("videos %v", got)
+	}
+}
+
+func TestReferenceSongs(t *testing.T) {
+	home := t.TempDir()
+	cs, _ := loadConfig(filepath.Join(home, "c.json"), home)
+	c := cs.Get()
+	c.ProjectsDir = filepath.Join(home, "songs")
+	cs.cfg = c
+	p := Projects{cfg: cs}
+	slug, _ := p.Create("Ninh Bình", "", "a", nil)
+	step := func(id string) Step {
+		d, _ := p.Detail(slug, nil)
+		for _, s := range d.Steps {
+			if s.ID == id {
+				return s
+			}
+		}
+		return Step{}
+	}
+	if d, _ := p.Detail(slug, nil); len(d.Steps) != 8 || d.Steps[0].ID != "lyrics" {
+		t.Fatalf("workflow should start at the lyrics step: %+v", d.Steps[0])
+	}
+	if _, err := p.AddRef(slug, "notes.txt", strings.NewReader("x")); err == nil {
+		t.Fatal("non-media accepted")
+	}
+	dst, err := p.AddRef(slug, "/Users/x/Downloads/Ninh Bình như một khúc ca.mp4", strings.NewReader("v"))
+	if err != nil || filepath.Base(dst) != "Ninh Bình như một khúc ca.mp4" {
+		t.Fatalf("add: %v %s", err, dst)
+	}
+	dup, _ := p.AddRef(slug, "Ninh Bình như một khúc ca.mp4", strings.NewReader("v"))
+	if filepath.Base(dup) != "Ninh Bình như một khúc ca-2.mp4" {
+		t.Fatalf("duplicate name: %s", dup)
+	}
+	p.WriteFile(slug, "brief.md", "không bộ gõ")
+	if got := step("lyrics").Detail; got != "1 dòng · 2 bài mẫu · có yêu cầu" {
+		t.Fatalf("lyrics detail %q", got)
+	}
+	// a prompt older than a fresh reference analysis is stale
+	p.WriteFile(slug, "suno/style.txt", "style")
+	p.WriteFile(slug, "suno/lyrics.txt", "[Verse 1]\na")
+	if got := step("suno").Status; got != "done" {
+		t.Fatalf("suno %s", got)
+	}
+	time.Sleep(20 * time.Millisecond)
+	os.WriteFile(dst+".analysis.txt", []byte("Tempo 80.0 BPM"), 0o644)
+	if got := step("suno").Status; got != "stale" {
+		t.Fatalf("suno should be stale after a new analysis, got %s", got)
+	}
+	if err := p.RemoveRef(slug, "../project.json"); err == nil {
+		t.Fatal("traversal in remove accepted")
+	}
+	if err := p.RemoveRef(slug, filepath.Base(dst)); err != nil || exists(dst+".analysis.txt") {
+		t.Fatalf("remove: %v", err)
+	}
+}
+
+func TestPresetsNormalize(t *testing.T) {
+	cfg := Config{Presets: []Preset{{"a", "b"}, {"", "x"}, {"y", ""}}}
+	normalizeConfig(&cfg, "/h")
+	if len(cfg.Presets) != 1 {
+		t.Fatalf("empty presets kept: %+v", cfg.Presets)
+	}
+	fresh := Config{}
+	normalizeConfig(&fresh, "/h")
+	if len(fresh.Presets) == 0 {
+		t.Fatal("defaults missing")
+	}
+}
+
+func TestChainRunsInParallelAndWaitsForDeps(t *testing.T) {
+	data := t.TempDir()
+	m, _ := newManager(data, func() (int, int) { return 1, 3 })
+	defer m.Shutdown(time.Second)
+	mark := filepath.Join(data, "order.txt")
+	sh := func(name string, sleep string) RunSpec {
+		return RunSpec{Kind: "script", Cwd: data, Argv: []string{"/bin/sh", "-c", "sleep " + sleep + "; echo " + name + " >> " + mark}}
+	}
+	start := time.Now()
+	metas, err := m.SubmitChain([]RunSpec{sh("a", "1"), sh("b", "1"), sh("c", "0")}, [][]int{nil, nil, {0, 1}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if metas[0].Group == "" || metas[0].Group != metas[2].Group || len(metas[2].After) != 2 {
+		t.Fatalf("group/deps not recorded: %+v", metas[2])
+	}
+	waitStatus(t, m, metas[2].ID, "succeeded")
+	if el := time.Since(start); el > 1900*time.Millisecond {
+		t.Fatalf("a and b should run in parallel, took %s", el)
+	}
+	b, _ := os.ReadFile(mark)
+	lines := strings.Fields(string(b))
+	if len(lines) != 3 || lines[2] != "c" {
+		t.Fatalf("c must run after a and b: %v", lines)
+	}
+	if len(m.Group(metas[0].Group)) != 3 {
+		t.Fatal("group listing")
+	}
+}
+
+func TestChainFailurePropagates(t *testing.T) {
+	data := t.TempDir()
+	m, _ := newManager(data, func() (int, int) { return 1, 2 })
+	defer m.Shutdown(time.Second)
+	metas, _ := m.SubmitChain([]RunSpec{
+		{Kind: "script", Cwd: data, Argv: []string{"/bin/sh", "-c", "exit 1"}},
+		{Kind: "script", Cwd: data, Argv: []string{"/bin/sh", "-c", "echo never"}},
+		{Kind: "script", Cwd: data, Argv: []string{"/bin/sh", "-c", "echo never"}},
+	}, [][]int{nil, {0}, {1}})
+	for _, mm := range metas[1:] {
+		got := waitStatus(t, m, mm.ID, "failed")
+		if got.Started.Year() > 1 {
+			t.Fatal("dependent run must not start")
+		}
+	}
+}
+
+func TestHeavyRunsShareOneSlot(t *testing.T) {
+	data := t.TempDir()
+	m, _ := newManager(data, func() (int, int) { return 1, 3 })
+	defer m.Shutdown(time.Second)
+	h1, _ := m.Submit(RunSpec{Kind: "script", Heavy: true, Cwd: data, Argv: []string{"/bin/sh", "-c", "sleep 2"}})
+	h2, _ := m.Submit(RunSpec{Kind: "script", Heavy: true, Cwd: data, Argv: []string{"/bin/sh", "-c", "sleep 2"}})
+	l1, _ := m.Submit(RunSpec{Kind: "script", Cwd: data, Argv: []string{"/bin/sh", "-c", "echo light"}})
+	waitStatus(t, m, h1.ID, "running")
+	waitStatus(t, m, l1.ID, "succeeded") // a light job is not stuck behind heavy ones
+	if r, _ := m.Get(h2.ID); r.snapshot().Status != "queued" {
+		t.Fatal("second heavy job should wait")
+	}
+	m.Stop(h1.ID)
+	m.Stop(h2.ID)
+}
+
+func TestSkillProfilesFromFile(t *testing.T) {
+	dir := t.TempDir()
+	os.MkdirAll(filepath.Join(dir, "references"), 0o755)
+	os.WriteFile(filepath.Join(dir, "references", "style-profiles.md"), []byte("# x\n## A. Pop ballad\ntext\n## B. Trữ tình mộc (\"Hạ Long\")\n### not a profile\n## C. Dân ca mượt\n"), 0o644)
+	got := skillProfiles(dir)
+	if len(got) != 3 || got[1].ID != "B" || got[2].Title != "Dân ca mượt" {
+		t.Fatalf("profiles %+v", got)
+	}
+	if !strings.Contains(profileInstruction(ActionRequest{Profile: "C"}, dir), "profile C") || !strings.Contains(profileInstruction(ActionRequest{}, dir), "tự chọn") {
+		t.Fatal("profile instruction")
+	}
+}
+
+// Building the mux panics on conflicting patterns, so this catches route mistakes in CI.
+func TestRoutesRegisterAndServe(t *testing.T) {
+	home := t.TempDir()
+	cs, _ := loadConfig(filepath.Join(home, "c.json"), home)
+	m, _ := newManager(t.TempDir(), func() (int, int) { return 1, 1 })
+	defer m.Shutdown(time.Second)
+	app := &App{cfg: cs, runs: m, projects: Projects{cfg: cs}, token: "tok", home: home, version: "t", build: "b", started: time.Now()}
+	h := app.routes()
+	for _, path := range []string{"/", "/api/health", "/api/projects", "/api/runs", "/api/groups/none", "/api/skill/profiles", "/css/app.css", "/js/app.js"} {
+		r := httptest.NewRequest("GET", path, nil)
+		r.Host = "127.0.0.1:4317"
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, r)
+		if w.Code != 200 {
+			t.Errorf("GET %s: %d", path, w.Code)
+		}
+	}
+}
+
+// A song with music but no timings yet must still get the whole video chain.
+func TestVideoPipelineBeforeAlignment(t *testing.T) {
+	home := t.TempDir()
+	cs, _ := loadConfig(filepath.Join(home, "c.json"), home)
+	c := cs.Get()
+	c.ProjectsDir = filepath.Join(home, "songs")
+	c.SkillDir = t.TempDir()
+	cs.cfg = c
+	p := Projects{cfg: cs}
+	slug, _ := p.Create("Ninh Bình", "Đẹp Tựa Vần Thơ", "a", nil)
+	p.ImportAudio(slug, "x.m4a", strings.NewReader("audio"))
+	d, _ := p.Detail(slug, nil)
+	specs, deps, err := pipelineSpecs("video", cs.Get(), d, ActionRequest{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	steps := []string{}
+	for _, s := range specs {
+		steps = append(steps, s.Step)
+	}
+	if strings.Join(steps, ",") != "align,trim,scenes,scenes,stills,render" {
+		t.Fatalf("chain %v", steps)
+	}
+	for i := 1; i < len(deps); i++ {
+		if len(deps[i]) != 1 || deps[i][0] != i-1 {
+			t.Fatalf("link %d should wait for %d: %v", i, i-1, deps[i])
+		}
+	}
+	if !specs[0].Heavy || specs[2].Kind != "agent" || specs[5].FingerprintDir == "" {
+		t.Fatalf("specs %+v", specs)
+	}
+	if _, _, err := pipelineSpecs("video", cs.Get(), ProjectDetail{}, ActionRequest{}); err == nil {
+		t.Fatal("a song without music must be refused")
+	}
+}
+
+// Every list in a project detail must serialise as [] (never null): the UI indexes into them.
+func TestProjectDetailListsNeverNull(t *testing.T) {
+	home := t.TempDir()
+	cs, _ := loadConfig(filepath.Join(home, "c.json"), home)
+	c := cs.Get()
+	c.ProjectsDir = filepath.Join(home, "songs")
+	cs.cfg = c
+	p := Projects{cfg: cs}
+	slug, _ := p.Create("Bài", "", "a", nil)
+	d, _ := p.Detail(slug, nil)
+	b, _ := json.Marshal(d)
+	for _, k := range []string{"timings", "images", "stills", "videos", "refs", "steps"} {
+		if strings.Contains(string(b), `"`+k+`":null`) {
+			t.Errorf("%s is null", k)
+		}
+	}
+}
+
+func TestNoisyStderr(t *testing.T) {
+	noisy := []string{" 23%|███▍      | 61.1/263.25 [00:06<00:22,  9.02seconds/s]", "  4%|▍ | 10/250 [00:01<00:20, 11.5it/s]", "ERROR rmcp::transport::worker quit"}
+	keep := []string{"Separating track /x/song.wav", "100 percent done", "error: file not found"}
+	for _, l := range noisy {
+		if !noisyStderr(l) {
+			t.Errorf("should drop %q", l)
+		}
+	}
+	for _, l := range keep {
+		if noisyStderr(l) {
+			t.Errorf("should keep %q", l)
+		}
+	}
+}
+
+func videoChainSteps(t *testing.T, cs *ConfigStore, d ProjectDetail) string {
+	t.Helper()
+	specs, _, err := pipelineSpecs("video", cs.Get(), d, ActionRequest{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	out := []string{}
+	for _, s := range specs {
+		out = append(out, s.Step)
+		if s.Kind == "agent" && strings.Contains(s.Prompt, "Giữ nguyên \"id\"") {
+			out[len(out)-1] = "retime"
+		}
+	}
+	return strings.Join(out, ",")
+}
+
+// Replacing the music must re-align and re-time scenes; a finished song only re-renders.
+func TestVideoChainFollowsStaleness(t *testing.T) {
+	home := t.TempDir()
+	cs, _ := loadConfig(filepath.Join(home, "c.json"), home)
+	c := cs.Get()
+	c.ProjectsDir = filepath.Join(home, "songs")
+	c.SkillDir = t.TempDir()
+	cs.cfg = c
+	p := Projects{cfg: cs}
+	slug, _ := p.Create("Ninh Bình", "", "a", nil)
+	p.ImportAudio(slug, "a.m4a", strings.NewReader("audio1"))
+	d, _ := p.Detail(slug, nil)
+	// a finished song: timings newer than the audio, intro cut, scenes with images
+	os.WriteFile(filepath.Join(d.Dir, "work", "timings.json"), []byte(`[{"text":"a","times":[[11,12]],"suno_start":11,"source":"whisper"}]`), 0o644)
+	var cfg map[string]any
+	b, _ := os.ReadFile(filepath.Join(d.Dir, "project.json"))
+	json.Unmarshal(b, &cfg)
+	cfg["intro_cut"] = []float64{4, 12}
+	cfg["scenes"] = []map[string]any{{"id": "01-title", "start": 0, "prompt": "x"}}
+	nb, _ := json.Marshal(cfg)
+	os.WriteFile(filepath.Join(d.Dir, "project.json"), nb, 0o644)
+	os.WriteFile(filepath.Join(d.Dir, "img", "01-title.png"), []byte("png"), 0o644)
+	d, _ = p.Detail(slug, nil)
+	if got := videoChainSteps(t, cs, d); got != "scenes,stills,render" {
+		t.Fatalf("finished song should only refresh images, stills, render: %s", got)
+	}
+	// new music: timings are now stale
+	time.Sleep(20 * time.Millisecond)
+	p.ImportAudio(slug, "b.m4a", strings.NewReader("audio2"))
+	d, _ = p.Detail(slug, nil)
+	if got := videoChainSteps(t, cs, d); got != "align,trim,retime,scenes,stills,render" {
+		t.Fatalf("replaced music should re-align and re-time scenes: %s", got)
+	}
+}
+
+func TestPipelineRefusedWhileRunning(t *testing.T) {
+	home := t.TempDir()
+	cs, _ := loadConfig(filepath.Join(home, "c.json"), home)
+	c := cs.Get()
+	c.ProjectsDir = filepath.Join(home, "songs")
+	c.SkillDir = t.TempDir()
+	cs.cfg = c
+	m, _ := newManager(t.TempDir(), func() (int, int) { return 1, 1 })
+	defer m.Shutdown(time.Second)
+	app := &App{cfg: cs, runs: m, projects: Projects{cfg: cs}, token: "tok", home: home, version: "t", build: "b", started: time.Now()}
+	slug, _ := app.projects.Create("Bài", "", "a", nil)
+	d, _ := app.projects.Detail(slug, nil)
+	// a long-running job on the render step of this song
+	m.Submit(RunSpec{Kind: "script", Step: "render", Project: slug, Cwd: d.Dir, Argv: []string{"/bin/sh", "-c", "sleep 5"}})
+	app.projects.ImportAudio(slug, "a.m4a", strings.NewReader("x"))
+	h := app.routes()
+	r := httptest.NewRequest("POST", "/api/projects/"+slug+"/pipeline/video", strings.NewReader("{}"))
+	r.Host = "127.0.0.1:4317"
+	r.Header.Set("X-Studio-Token", "tok")
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, r)
+	if w.Code != http.StatusConflict {
+		t.Fatalf("second chain should be refused, got %d %s", w.Code, w.Body.String())
+	}
+}
+
+func TestChainEventsStartWithQueuedStatus(t *testing.T) {
+	data := t.TempDir()
+	m, _ := newManager(data, func() (int, int) { return 1, 1 })
+	defer m.Shutdown(time.Second)
+	metas, _ := m.SubmitChain([]RunSpec{{Kind: "script", Cwd: data, Argv: []string{"true"}}, {Kind: "script", Cwd: data, Argv: []string{"true"}}}, [][]int{nil, {0}})
+	waitStatus(t, m, metas[1].ID, "succeeded")
+	for _, mm := range metas {
+		r, _ := m.Get(mm.ID)
+		ev := m.Events(r, 0)
+		if len(ev) == 0 || ev[0].Kind != "status" || !strings.Contains(ev[0].Title, "Chờ") && !strings.Contains(ev[0].Title, "chờ") {
+			t.Fatalf("first event should be the queued status: %+v", ev[0])
+		}
 	}
 }

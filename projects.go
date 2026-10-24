@@ -218,8 +218,7 @@ func (p Projects) Detail(slug string, active map[string]string) (ProjectDetail, 
 func deriveSteps(dir string, pc projectConfig, d ProjectDetail, active map[string]string) []Step {
 	mt := func(rel string) time.Time { return mtime(filepath.Join(dir, rel)) }
 	steps := []Step{
-		{ID: "ref", Title: "Bài mẫu & yêu cầu"},
-		{ID: "lyrics", Title: "Lời bài hát"},
+		{ID: "lyrics", Title: "Lời, bài mẫu & yêu cầu"},
 		{ID: "suno", Title: "Prompt Suno"},
 		{ID: "audio", Title: "Nhạc từ Suno"},
 		{ID: "align", Title: "Canh lời từng chữ"},
@@ -235,25 +234,29 @@ func deriveSteps(dir string, pc projectConfig, d ProjectDetail, active map[strin
 			}
 		}
 	}
-	switch {
-	case strings.TrimSpace(d.Profile) != "":
-		set("ref", "done", fmt.Sprintf("Kiểu phối riêng · %d bài mẫu", len(d.Refs)))
-	case len(d.Refs) > 0 || strings.TrimSpace(d.Brief) != "":
-		set("ref", "todo", fmt.Sprintf("%d bài mẫu, chưa tạo kiểu phối", len(d.Refs)))
-	default:
-		set("ref", "skip", "Không bắt buộc: thêm bài mẫu hoặc yêu cầu phối")
-	}
 	lines := strings.Count(strings.TrimSpace(d.Lyrics), "\n") + 1
 	if strings.TrimSpace(d.Lyrics) == "" {
 		set("lyrics", "todo", "Chưa có lời")
 	} else {
-		set("lyrics", "done", fmt.Sprintf("%d dòng", lines))
+		parts := []string{fmt.Sprintf("%d dòng", lines)}
+		if len(d.Refs) > 0 {
+			parts = append(parts, fmt.Sprintf("%d bài mẫu", len(d.Refs)))
+		}
+		if strings.TrimSpace(d.Brief) != "" {
+			parts = append(parts, "có yêu cầu")
+		}
+		set("lyrics", "done", strings.Join(parts, " · "))
+	}
+	// the Suno prompt is built from the lyrics, the brief and the reference analyses
+	inputs := []string{"lyrics.txt", "brief.md"}
+	for _, r := range d.Refs {
+		inputs = append(inputs, r.Path+".analysis.txt")
 	}
 	switch {
 	case d.SunoLyrics == "" || d.SunoStyle == "":
-		set("suno", "todo", "Chưa có lời chia đoạn và Styles")
-	case mt("lyrics.txt").After(mt("suno/lyrics.txt")):
-		set("suno", "stale", "Lời gốc đã đổi sau khi chia đoạn")
+		set("suno", "todo", "Chưa tạo prompt")
+	case newestOf(dir, inputs).After(mt("suno/style.txt")):
+		set("suno", "stale", "Lời, yêu cầu hoặc bài mẫu đã đổi sau khi tạo prompt")
 	default:
 		set("suno", "done", fmt.Sprintf("Styles %d/1000 ký tự", len([]rune(strings.TrimSpace(d.SunoStyle)))))
 	}
@@ -366,7 +369,7 @@ func (p Projects) Create(title, subtitle, lyrics string, credits [][2]string) (s
 	}
 	cfg := map[string]any{
 		"title": title, "subtitle": strings.TrimSpace(subtitle), "credits": cr,
-		"karaoke_color": "pink", "badge": false, "image_model": "gpt-image-2.5", "profile": "B", "scenes": []any{},
+		"karaoke_color": "pink", "badge": false, "image_model": p.cfg.Get().ImageModel, "scenes": []any{},
 	}
 	return slug, writeJSONAtomic(filepath.Join(dir, "project.json"), cfg, 0o644)
 }
@@ -581,10 +584,11 @@ func karaokeVideos(dir, audio string) []string {
 	return out
 }
 
+// readTimings never returns nil: the UI treats every list in ProjectDetail as an array.
 func readTimings(path string) []TimingLine {
 	raw, err := os.ReadFile(path)
 	if err != nil {
-		return nil
+		return []TimingLine{}
 	}
 	var lines []struct {
 		Text      string      `json:"text"`
@@ -593,7 +597,7 @@ func readTimings(path string) []TimingLine {
 		Source    string      `json:"source"`
 	}
 	if json.Unmarshal(raw, &lines) != nil {
-		return nil
+		return []TimingLine{}
 	}
 	out := []TimingLine{}
 	for _, l := range lines {

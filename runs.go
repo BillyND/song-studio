@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"sync"
@@ -32,6 +33,12 @@ type RunSpec struct {
 	// FingerprintDir, when set, makes the run record InputsHash for that project as it starts.
 	FingerprintDir string   `json:"fingerprintDir,omitempty"`
 	Argv           []string `json:"argv"`
+	// Heavy runs (vocal separation, rendering, audio analysis) share a small CPU budget;
+	// light runs (agents waiting on an API, image downloads) run alongside them.
+	Heavy bool `json:"heavy,omitempty"`
+	// After lists run IDs that must succeed before this one starts; Group ties a chain together.
+	After []string `json:"after,omitempty"`
+	Group string   `json:"group,omitempty"`
 }
 
 // RunMeta is the persisted, JSON-visible state of a run.
@@ -68,7 +75,7 @@ type Manager struct {
 	dir   string
 	runs  map[string]*run
 	order []string
-	limit func() int
+	limit func() (heavy, light int)
 	wake  chan struct{}
 	// OnFinish runs after a run reaches a final state (set before Submit is used).
 	OnFinish func(RunMeta)
@@ -76,7 +83,7 @@ type Manager struct {
 	wg       sync.WaitGroup
 }
 
-func newManager(dataDir string, limit func() int) (*Manager, error) {
+func newManager(dataDir string, limit func() (heavy, light int)) (*Manager, error) {
 	m := &Manager{dir: filepath.Join(dataDir, "runs"), runs: map[string]*run{}, limit: limit, wake: make(chan struct{}, 1)}
 	if err := os.MkdirAll(m.dir, 0o755); err != nil {
 		return nil, err
@@ -131,32 +138,92 @@ func newRunID() string {
 
 // Submit validates the spec and queues it.
 func (m *Manager) Submit(spec RunSpec) (RunMeta, error) {
-	if len(spec.Argv) == 0 {
-		return RunMeta{}, errors.New("empty command")
+	metas, err := m.SubmitChain([]RunSpec{spec}, nil)
+	if err != nil {
+		return RunMeta{}, err
 	}
-	if spec.Cwd == "" {
-		return RunMeta{}, errors.New("missing working directory")
-	}
-	if st, err := os.Stat(spec.Cwd); err != nil || !st.IsDir() {
-		return RunMeta{}, fmt.Errorf("working directory not found: %s", spec.Cwd)
+	return metas[0], nil
+}
+
+// SubmitChain queues several runs at once. deps[i] lists indexes (into specs) that run i
+// waits for; independent runs start in parallel as capacity allows.
+func (m *Manager) SubmitChain(specs []RunSpec, deps [][]int) ([]RunMeta, error) {
+	for _, spec := range specs {
+		if len(spec.Argv) == 0 {
+			return nil, errors.New("empty command")
+		}
+		if spec.Cwd == "" {
+			return nil, errors.New("missing working directory")
+		}
+		if st, err := os.Stat(spec.Cwd); err != nil || !st.IsDir() {
+			return nil, fmt.Errorf("working directory not found: %s", spec.Cwd)
+		}
 	}
 	m.mu.Lock()
 	if m.closed {
 		m.mu.Unlock()
-		return RunMeta{}, errors.New("studio is shutting down")
+		return nil, errors.New("studio is shutting down")
 	}
-	r := &run{meta: RunMeta{RunSpec: spec, ID: newRunID(), Status: "queued", Created: time.Now()}, subs: map[chan Event]struct{}{}, done: make(chan struct{})}
-	if err := os.MkdirAll(filepath.Join(m.dir, r.meta.ID), 0o755); err != nil {
-		m.mu.Unlock()
-		return RunMeta{}, err
+	group := ""
+	if len(specs) > 1 {
+		group = "g-" + newRunID()
 	}
-	m.runs[r.meta.ID] = r
-	m.order = append(m.order, r.meta.ID)
+	created := make([]*run, len(specs))
+	for i, spec := range specs {
+		if group != "" {
+			spec.Group = group
+		}
+		if i < len(deps) {
+			for _, d := range deps[i] {
+				if d < 0 || d >= i {
+					m.mu.Unlock()
+					return nil, fmt.Errorf("run %d may only wait for earlier runs", i)
+				}
+				spec.After = append(spec.After, created[d].meta.ID)
+			}
+		}
+		r := &run{meta: RunMeta{RunSpec: spec, ID: newRunID(), Status: "queued", Created: time.Now()}, subs: map[chan Event]struct{}{}, done: make(chan struct{})}
+		if err := os.MkdirAll(filepath.Join(m.dir, r.meta.ID), 0o755); err != nil {
+			m.mu.Unlock()
+			return nil, err
+		}
+		r.persist(m.dir)
+		title := "Đang chờ tới lượt"
+		if len(r.meta.After) > 0 {
+			title = "Chờ bước trước xong"
+		}
+		r.emit(m.dir, Event{Kind: "status", Title: title})
+		m.runs[r.meta.ID] = r
+		m.order = append(m.order, r.meta.ID)
+		created[i] = r
+	}
 	m.mu.Unlock()
-	r.persist(m.dir)
-	r.emit(m.dir, Event{Kind: "status", Title: "Đang chờ tới lượt"})
+	out := make([]RunMeta, len(created))
+	for i, r := range created {
+		out[i] = r.snapshot()
+	}
 	m.poke()
-	return r.snapshot(), nil
+	return out, nil
+}
+
+// Group returns the runs of one chain in submission order.
+func (m *Manager) Group(group string) []RunMeta {
+	out := []RunMeta{}
+	if group == "" {
+		return out
+	}
+	m.mu.Lock()
+	ids := append([]string(nil), m.order...)
+	m.mu.Unlock()
+	for _, id := range ids {
+		if r, ok := m.Get(id); ok {
+			if meta := r.snapshot(); meta.Group == group {
+				meta.Prompt = ""
+				out = append(out, meta)
+			}
+		}
+	}
+	return out
 }
 
 func (m *Manager) poke() {
@@ -168,47 +235,96 @@ func (m *Manager) poke() {
 
 func (m *Manager) scheduler() {
 	for range m.wake {
-		for {
-			m.mu.Lock()
-			if m.closed {
-				m.mu.Unlock()
-				return
-			}
-			running := 0
-			var next *run
-			for _, id := range m.order {
-				r := m.runs[id]
-				r.mu.Lock()
-				st := r.meta.Status
-				r.mu.Unlock()
-				if st == "running" {
-					running++
-				} else if st == "queued" && next == nil {
-					next = r
-				}
-			}
-			if next == nil || running >= m.limit() {
-				m.mu.Unlock()
-				break
-			}
-			next.mu.Lock()
-			if next.meta.Status != "queued" {
-				next.mu.Unlock()
-				m.mu.Unlock()
-				continue
-			}
-			next.meta.Status = "running"
-			next.meta.Started = time.Now()
-			next.mu.Unlock()
-			m.wg.Add(1)
-			m.mu.Unlock()
-			go func(r *run) {
-				defer m.wg.Done()
-				m.execute(r)
-				m.poke()
-			}(next)
+		for m.startNext() {
 		}
 	}
+}
+
+// startNext launches one runnable queued run, or fails one whose prerequisite failed.
+// It reports whether it changed anything, so the caller loops until nothing is ready.
+func (m *Manager) startNext() bool {
+	m.mu.Lock()
+	if m.closed {
+		m.mu.Unlock()
+		return false
+	}
+	status := map[string]string{}
+	heavyRunning, lightRunning := 0, 0
+	for _, id := range m.order {
+		r := m.runs[id]
+		r.mu.Lock()
+		status[id] = r.meta.Status
+		if r.meta.Status == "running" {
+			if r.meta.Heavy {
+				heavyRunning++
+			} else {
+				lightRunning++
+			}
+		}
+		r.mu.Unlock()
+	}
+	heavyCap, lightCap := m.limit()
+	for _, id := range m.order {
+		r := m.runs[id]
+		r.mu.Lock()
+		if r.meta.Status != "queued" {
+			r.mu.Unlock()
+			continue
+		}
+		ready, blockedBy := true, ""
+		for _, dep := range r.meta.After {
+			switch status[dep] {
+			case "succeeded":
+			case "failed", "stopped", "interrupted", "":
+				blockedBy = dep
+			default:
+				ready = false
+			}
+		}
+		if blockedBy != "" {
+			r.meta.Status = "failed"
+			r.meta.Error = "bước trước không hoàn thành: " + blockedBy
+			r.meta.Ended = time.Now()
+			r.mu.Unlock()
+			m.mu.Unlock()
+			r.emit(m.dir, Event{Kind: "status", Title: "Bỏ qua vì bước trước không hoàn thành", Error: true})
+			r.persist(m.dir)
+			m.closeRun(r)
+			return true
+		}
+		capOK := (r.meta.Heavy && heavyRunning < heavyCap) || (!r.meta.Heavy && lightRunning < lightCap)
+		if !ready || !capOK {
+			r.mu.Unlock()
+			continue
+		}
+		r.meta.Status = "running"
+		r.meta.Started = time.Now()
+		r.mu.Unlock()
+		m.wg.Add(1)
+		m.mu.Unlock()
+		go func() {
+			defer m.wg.Done()
+			m.execute(r)
+			m.poke()
+		}()
+		return true
+	}
+	m.mu.Unlock()
+	return false
+}
+
+// closeRun ends a run that never started: release waiters and live subscribers.
+func (m *Manager) closeRun(r *run) {
+	if m.OnFinish != nil {
+		m.OnFinish(r.snapshot())
+	}
+	r.mu.Lock()
+	for ch := range r.subs {
+		close(ch)
+	}
+	r.subs = map[chan Event]struct{}{}
+	r.mu.Unlock()
+	close(r.done)
 }
 
 func (m *Manager) execute(r *run) {
@@ -509,13 +625,8 @@ func (m *Manager) Stop(id string) error {
 	if queued {
 		r.emit(m.dir, Event{Kind: "status", Title: "Đã huỷ trước khi chạy"})
 		r.persist(m.dir)
-		r.mu.Lock()
-		for ch := range r.subs {
-			close(ch)
-		}
-		r.subs = map[chan Event]struct{}{}
-		r.mu.Unlock()
-		close(r.done)
+		m.closeRun(r)
+		m.poke() // runs waiting on this one now fail instead of waiting forever
 		return nil
 	}
 	if cmd != nil && cmd.Process != nil {
@@ -604,7 +715,10 @@ func stripANSI(s string) string {
 	return b.String()
 }
 
+var progressBar = regexp.MustCompile(`\d+%\|`)
+
+// noisyStderr drops progress bars (tqdm prints dozens per second) and known harmless MCP noise.
 func noisyStderr(line string) bool {
 	l := strings.ToLower(line)
-	return strings.Contains(l, "rmcp::transport") || strings.Contains(l, "%|") && strings.Contains(l, "it/s")
+	return strings.Contains(l, "rmcp::transport") || progressBar.MatchString(line)
 }

@@ -61,7 +61,7 @@ func main() {
 	if err != nil {
 		fatal(err)
 	}
-	runs, err := newManager(*dataDir, func() int { return cfg.Get().MaxConcurrent })
+	runs, err := newManager(*dataDir, func() (int, int) { c := cfg.Get(); return c.MaxConcurrent, c.MaxAgents })
 	if err != nil {
 		fatal(err)
 	}

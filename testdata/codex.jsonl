@@ -1,0 +1,9 @@
+{"type": "thread.started", "thread_id": "01a16a58-e0e5-7b22-ab89-20b3b86da2d6"}
+{"type": "turn.started"}
+{"type": "item.completed", "item": {"id": "item_0", "type": "agent_message", "text": "I’ll run the command once."}}
+{"type": "item.started", "item": {"id": "item_1", "type": "command_execution", "command": "/bin/zsh -lc 'ls'", "aggregated_output": "a.txt\n", "exit_code": null, "status": "in_progress"}}
+{"type": "item.completed", "item": {"id": "item_1", "type": "command_execution", "command": "/bin/zsh -lc 'ls'", "aggregated_output": "a.txt\n", "exit_code": 0, "status": "completed"}}
+{"type": "item.started", "item": {"id": "item_2", "type": "command_execution", "command": "/bin/zsh -lc 'echo hi-from-tool'", "aggregated_output": "", "exit_code": null, "status": "in_progress"}}
+{"type": "item.completed", "item": {"id": "item_2", "type": "command_execution", "command": "/bin/zsh -lc 'echo hi-from-tool'", "aggregated_output": "hi-from-tool\n", "exit_code": 0, "status": "completed"}}
+{"type": "item.completed", "item": {"id": "item_3", "type": "agent_message", "text": "DONE"}}
+{"type": "turn.completed", "usage": {"input_tokens": 59978, "cached_input_tokens": 29696, "cache_write_input_tokens": 0, "output_tokens": 82, "reasoning_output_tokens": 0}}

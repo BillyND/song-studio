@@ -36,8 +36,12 @@ downloads to `~/Downloads`, and links outside the studio open in the default bro
 ## Updates
 
 Sparkle 2.10 checks <https://github.com/BillyND/song-studio/releases/latest/download/appcast.xml>
-every hour (and on Song Studio → Kiểm tra cập nhật…), downloads in the background, verifies
-the EdDSA signature, and installs on quit or when the user clicks "Cài đặt cập nhật". Before
+every hour (and on Song Studio → Kiểm tra cập nhật…) and verifies the EdDSA signature. Cài đặt →
+Cập nhật · Settings → Updates (in the app only) has two switches, kept in Sparkle's own defaults
+and applied at once: **check for new versions automatically** (on by default) and **download and
+install automatically** (off by default; every copy is switched off once when it reaches this
+version, through the `studioUpdatesOptIn` default). With installing off, Sparkle asks before it
+downloads; with it on, it downloads in the background and installs on quit. Before
 relaunching it waits until no job is queued or running. Each release also carries a snapshot of
 the skill; on start the server installs it into `~/.claude/skills/suno-que-huong` when it is new,
 backing up local edits to `~/.local/share/que-huong-studio/skill-backups/` first.

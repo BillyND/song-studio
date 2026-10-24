@@ -20,6 +20,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate {
 
         let config = WKWebViewConfiguration()
         config.preferences.isElementFullscreenEnabled = true
+        config.userContentController.addScriptMessageHandler(UpdatePrefs(updater: updater.updater), contentWorld: .page, name: "updates")
         web = WKWebView(frame: .zero, configuration: config)
         web.navigationDelegate = browser
         web.uiDelegate = browser

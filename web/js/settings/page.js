@@ -4,6 +4,7 @@ import { Icon } from "../icons.js";
 import { Btn, Field, Seg } from "../ui.js";
 import { DoctorCard } from "./doctor.js";
 import { ImageCard } from "./image.js";
+import { UpdatesCard } from "./updates.js";
 
 // agent steps whose model can be set apart from the agent's default
 const STEP_MODELS = [["lyrics.agent", "Soát lời"], ["style.agent", "Phối khí & Styles"], ["scenes.agent", "Lên cảnh"], ["suno.agent", "Điền form Suno"]];
@@ -34,6 +35,7 @@ export function SettingsPage() {
         <${Field} label="Ngôn ngữ giao diện · Interface language" hint="Lưu để áp dụng. Lời bài hát và ngôn ngữ hát của từng bài không đổi. · Save to apply; lyrics and each song's sung language stay as they are.">
           <${Seg} value=${cfg.language || "vi"} onChange=${(v) => set("language", v)} options=${[{ value: "vi", label: "Tiếng Việt" }, { value: "en", label: "English" }]} /></${Field}>
       </div>
+      <${UpdatesCard} />
       <${DoctorCard} />
       <div class="card card-pad stack">
         <h2>Agent</h2>

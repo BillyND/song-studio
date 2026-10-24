@@ -21,11 +21,11 @@ final class BrowserDelegate: NSObject, WKNavigationDelegate, WKUIDelegate, WKDow
         let button = retry ? "<p><a href=\"qhs://retry\">\(L("Thử lại", "Try again"))</a></p>" : #"<div class="spin"></div>"#
         web.loadHTMLString("""
         <!doctype html><meta charset="utf-8"><style>
-        :root{color-scheme:light dark}body{margin:0;height:100vh;display:grid;place-items:center;font:15px -apple-system,sans-serif;background:#0f1117;color:#e6e8ef}
-        @media(prefers-color-scheme:light){body{background:#f5f6fa;color:#1d2130}}
+        :root{color-scheme:light dark}body{margin:0;height:100vh;display:grid;place-items:center;font:15px -apple-system,sans-serif;background:#0f0f11;color:#f4f4f5}
+        @media(prefers-color-scheme:light){body{background:#fafafa;color:#18181b}}
         .box{text-align:center;max-width:520px;padding:24px}h1{font-size:20px;margin:0 0 8px}p{opacity:.75;line-height:1.5}
-        a{display:inline-block;margin-top:8px;padding:9px 18px;border-radius:10px;background:linear-gradient(90deg,#ff5fa2,#ffb36b);color:#fff;text-decoration:none;font-weight:600}
-        .spin{width:28px;height:28px;margin:18px auto 0;border:3px solid #8884;border-top-color:#ff5fa2;border-radius:50%;animation:s 1s linear infinite}@keyframes s{to{transform:rotate(1turn)}}
+        a{display:inline-block;margin-top:8px;padding:8px 16px;border-radius:6px;background:#db2777;color:#fff;text-decoration:none;font-weight:500}
+        .spin{width:28px;height:28px;margin:18px auto 0;border:3px solid #8884;border-top-color:#db2777;border-radius:50%;animation:s 1s linear infinite}@keyframes s{to{transform:rotate(1turn)}}
         </style><div class="box"><h1>\(esc(title))</h1><p>\(esc(detail))</p>\(button)</div>
         """, baseURL: nil)
     }

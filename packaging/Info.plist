@@ -22,7 +22,7 @@
   <key>SUFeedURL</key><string>https://github.com/BillyND/song-studio/releases/latest/download/appcast.xml</string>
   <key>SUPublicEDKey</key><string>__SPARKLE_KEY__</string>
   <key>SUEnableAutomaticChecks</key><true/>
-  <key>SUAutomaticallyUpdate</key><true/>
+  <key>SUAutomaticallyUpdate</key><false/>
   <key>SUScheduledCheckInterval</key><integer>3600</integer>
 </dict>
 </plist>

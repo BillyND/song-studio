@@ -2,8 +2,8 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-  <key>CFBundleName</key><string>Quê Hương Studio</string>
-  <key>CFBundleDisplayName</key><string>Quê Hương Studio</string>
+  <key>CFBundleName</key><string>Song Studio</string>
+  <key>CFBundleDisplayName</key><string>Song Studio</string>
   <key>CFBundleIdentifier</key><string>local.que-huong-studio</string>
   <key>CFBundleVersion</key><string>__VERSION__</string>
   <key>CFBundleShortVersionString</key><string>__VERSION__</string>
@@ -14,7 +14,7 @@
   <key>CFBundleLocalizations</key><array><string>vi</string></array>
   <key>LSMinimumSystemVersion</key><string>13.0</string>
   <key>LSApplicationCategoryType</key><string>public.app-category.music</string>
-  <key>NSHumanReadableCopyright</key><string>Quê Hương Studio — chạy trên máy bạn</string>
+  <key>NSHumanReadableCopyright</key><string>Song Studio — chạy trên máy bạn</string>
   <key>NSHighResolutionCapable</key><true/>
   <!-- the window talks only to the studio's own server on 127.0.0.1 -->
   <key>NSAppTransportSecurity</key><dict><key>NSAllowsLocalNetworking</key><true/></dict>

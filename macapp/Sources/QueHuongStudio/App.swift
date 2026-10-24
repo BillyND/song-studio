@@ -2,7 +2,7 @@ import AppKit
 import Sparkle
 import WebKit
 
-/// Quê Hương Studio as a Mac app: one window showing the studio UI served by the bundled Go server,
+/// Song Studio as a Mac app: one window showing the studio UI served by the bundled Go server,
 /// Vietnamese menus, and Sparkle checking the public releases feed for new versions.
 final class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate {
     private var window: NSWindow!
@@ -28,7 +28,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate {
 
         window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1360, height: 880),
                           styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
-        window.title = "Quê Hương Studio"
+        window.title = "Song Studio"
         window.minSize = NSSize(width: 860, height: 560)
         window.contentView = web
         window.center()
@@ -81,7 +81,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate {
 
     private func serverExited(_ code: Int32) {
         if quitting { return }
-        if code == 0 { // "Tắt studio" in the UI: the user asked to quit
+        if code == 0 { // the server was asked to quit (POST /api/shutdown): close the app with it
             quitting = true
             NSApp.terminate(nil)
             return
@@ -157,17 +157,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate {
             return i
         }
         let check = item("Kiểm tra cập nhật…", #selector(SPUStandardUpdaterController.checkForUpdates(_:)), target: updater)
-        _ = submenu("Quê Hương Studio", [
-            item("Giới thiệu Quê Hương Studio", #selector(NSApplication.orderFrontStandardAboutPanel(_:)), ""),
+        _ = submenu("Song Studio", [
+            item("Giới thiệu Song Studio", #selector(NSApplication.orderFrontStandardAboutPanel(_:)), ""),
             check,
             .separator(),
             item("Cài đặt…", #selector(openSettings), ",", target: self),
             .separator(),
-            item("Ẩn Quê Hương Studio", #selector(NSApplication.hide(_:)), "h"),
+            item("Ẩn Song Studio", #selector(NSApplication.hide(_:)), "h"),
             item("Ẩn ứng dụng khác", #selector(NSApplication.hideOtherApplications(_:)), "h", [.command, .option]),
             item("Hiện tất cả", #selector(NSApplication.unhideAllApplications(_:))),
             .separator(),
-            item("Thoát Quê Hương Studio", #selector(NSApplication.terminate(_:)), "q"),
+            item("Thoát Song Studio", #selector(NSApplication.terminate(_:)), "q"),
         ])
         _ = submenu("Sửa", [
             item("Hoàn tác", Selector(("undo:")), "z"),

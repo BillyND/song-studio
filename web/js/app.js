@@ -26,7 +26,7 @@ function Sidebar({ route }) {
   const ratio = Math.min(1, load / cpus);
   return html`<nav class="sidebar">
     <div class="brand"><div class="brand-mark"><${Icon} name="lotus" size=${20} stroke=${2.2} /></div>
-      <div class="brand-text"><div class="brand-name">Quê Hương Studio</div><div class="brand-sub">Lời → Suno → Video</div></div></div>
+      <div class="brand-text"><div class="brand-name">Song Studio</div><div class="brand-sub">Lời → Suno → Video</div></div></div>
     ${nav.map((n) => html`<a class=${"nav-item" + (n.on ? " active" : "")} href=${n.href} title=${n.label}><${Icon} name=${n.icon} size=${17} /><span class="nav-label">${n.label}</span>
       ${n.badge ? html`<span class="nav-badge">${n.badge}</span>` : null}</a>`)}
     <div class="sidebar-foot">
@@ -38,18 +38,10 @@ function Sidebar({ route }) {
       <div class="chips">${(boot?.agents || []).map((a) => html`<span class=${"chip" + (a.available ? " on" : "")} title=${a.version || "không thấy"}><span class="dot"></span>${a.name}</span>`)}</div>
       <div class="row" style="justify-content:space-between">
         <span class="muted small">v${boot?.version}</span>
-        <span class="row" style="gap:2px"><${ThemeToggle} /><${Btn} kind="ghost" size="sm" icon="stop" title="Tắt studio" onClick=${quit} /></span>
+        <${ThemeToggle} />
       </div>
     </div>
   </nav>`;
-}
-
-async function quit() {
-  const s = store.get().system;
-  const busy = s && s.running + s.queued;
-  if (!confirm(busy ? `Đang có ${busy} việc chạy. Tắt studio sẽ dừng chúng. Tắt?` : "Tắt Quê Hương Studio?")) return;
-  try { await api("/api/shutdown", { method: "POST" }); } catch { /* the server is already going away */ }
-  document.body.innerHTML = '<div style="height:100vh;display:grid;place-items:center;font:15px system-ui;color:#999">Studio đã tắt. Mở lại từ ứng dụng Quê Hương Studio.</div>';
 }
 
 function ThemeToggle() {

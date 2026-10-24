@@ -1,4 +1,4 @@
-# Quê Hương Studio
+# Song Studio
 
 A Mac app for the `suno-que-huong` skill. Each song goes through nine steps, from lyrics to a
 song, a 1080p karaoke video and a lead sheet. Every step either runs one of the skill's scripts
@@ -10,7 +10,7 @@ inside the app), which still serves the UI on `127.0.0.1:4317` only. Apple Silic
 
 ## Install and open
 
-For friends: download the newest `QueHuongStudio-<version>.zip` from
+For friends: download the newest `SongStudio-<version>.zip` from
 <https://github.com/BillyND/que-huong-studio-releases/releases>, unzip, drag the app to
 Applications, open it, and the first time allow it under System Settings → Privacy & Security →
 "Open Anyway" (the app is not signed by Apple). The releases repo README says the same in Vietnamese.
@@ -19,13 +19,13 @@ From source:
 
 ```bash
 cd ~/Coding/Personal/que-huong-studio
-make install        # tests, builds out/Quê Hương Studio.app, installs it to ~/Applications
+make install        # tests, builds out/Song Studio.app, installs it to ~/Applications
                     # and links ~/.local/bin/que-huong-studio to the bundled server
 ```
 
 Opening the app starts its own server. A studio already on port 4317 (a terminal run or an older
 app) is asked to quit first. Closing the window or Cmd+Q stops the server cleanly (queued work is
-kept); the ■ button in the sidebar does the same. Finder gives apps no PATH, so the app reads the
+kept). Finder gives apps no PATH, so the app reads the
 login shell's PATH (Homebrew, uv, nvm, `~/.local/bin`) when it starts.
 
 The window behaves like a browser for the studio: Vietnamese menus with the Edit shortcuts
@@ -36,7 +36,7 @@ downloads to `~/Downloads`, and links outside the studio open in the default bro
 ## Updates
 
 Sparkle 2.10 checks <https://github.com/BillyND/que-huong-studio-releases/releases/latest/download/appcast.xml>
-every hour (and on Quê Hương Studio → Kiểm tra cập nhật…), downloads in the background, verifies
+every hour (and on Song Studio → Kiểm tra cập nhật…), downloads in the background, verifies
 the EdDSA signature, and installs on quit or when the user clicks "Cài đặt cập nhật". Before
 relaunching it waits until no job is queued or running. Each release also carries a snapshot of
 the skill; on start the server installs it into `~/.claude/skills/suno-que-huong` when it is new,
@@ -60,7 +60,7 @@ export), or installed apps can never be updated again:
 | Command | What it does |
 |---|---|
 | `make build` | the Go server alone, `bin/que-huong-studio` |
-| `make app` | `out/Quê Hương Studio.app` |
+| `make app` | `out/Song Studio.app` |
 | `make test` | gofmt, `go vet`, Go tests |
 | `make run` | build the server and start it in a terminal |
 | `make release` | publish `VERSION` to the releases repo |

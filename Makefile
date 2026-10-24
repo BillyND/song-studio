@@ -1,7 +1,7 @@
-# Quê Hương Studio — a Mac app (Swift window + Go server) for the suno-que-huong skill.
+# Song Studio — a Mac app (Swift window + Go server) for the suno-que-huong skill.
 VERSION ?= $(shell cat VERSION)
 PREFIX  ?= $(HOME)/.local
-APPDIR  ?= $(HOME)/Applications/Quê Hương Studio.app
+APPDIR  ?= $(HOME)/Applications/Song Studio.app
 SKILL   ?= $(HOME)/.claude/skills/suno-que-huong
 BIN      = bin/que-huong-studio
 SPARKLE  = 2.10.0
@@ -20,18 +20,18 @@ test:
 run: build
 	./$(BIN)
 
-# app: out/Quê Hương Studio.app with the server, Sparkle and a snapshot of the skill
+# app: out/Song Studio.app with the server, Sparkle and a snapshot of the skill
 app: test
 	bash packaging/build-app.sh "$(VERSION)" "$(SKILL)"
 
 # install: the app into ~/Applications (quits a running copy first) and the server on PATH
 install: app
 	-osascript -e 'tell application id "local.que-huong-studio" to quit' >/dev/null 2>&1
-	rm -rf "$(APPDIR)"
-	ditto "out/Quê Hương Studio.app" "$(APPDIR)"
+	rm -rf "$(APPDIR)" "$(HOME)/Applications/Quê Hương Studio.app"  # the app's name before it became Song Studio
+	ditto "out/Song Studio.app" "$(APPDIR)"
 	install -d "$(PREFIX)/bin"
 	ln -sf "$(APPDIR)/Contents/MacOS/que-huong-studio" "$(PREFIX)/bin/que-huong-studio"
-	@echo "Installed $(VERSION). Open it with Spotlight: Quê Hương Studio"
+	@echo "Installed $(VERSION). Open it with Spotlight: Song Studio"
 
 # release: bump VERSION first; publishes to the public releases repo, and every installed app updates itself.
 # NOTES (optional, may span lines) reaches the script through the environment, not the command line.

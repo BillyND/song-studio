@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# Assemble "out/Quê Hương Studio.app": the Swift shell, the Go server, Sparkle and a snapshot of the skill.
+# Assemble "out/Song Studio.app": the Swift shell, the Go server, Sparkle and a snapshot of the skill.
 # Usage: packaging/build-app.sh <version> <skill-dir>
 set -euo pipefail
 VERSION="$1"
 SKILL="$2"
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 OUT="$ROOT/out"
-APP="$OUT/Quê Hương Studio.app"
+APP="$OUT/Song Studio.app"
 KEY="$(tr -d '\n' < "$ROOT/packaging/sparkle-public-key.txt")"
 
 [ -f "$SKILL/SKILL.md" ] || { echo "skill not found at $SKILL" >&2; exit 1; }

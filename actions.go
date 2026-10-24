@@ -94,7 +94,7 @@ func profileInstruction(req ActionRequest, skill string) string {
 	return "Phối theo bài mẫu: lấy tempo, nhịp, giọng, nhạc cụ, bộ gõ, bass và cấu trúc từ ref/*.analysis.txt, rồi áp yêu cầu mở rộng. references/style-profiles.md chỉ để học cách viết Styles và thẻ đoạn, không ép bài theo một profile có sẵn. Khi không có bài mẫu thì mới dùng profile mặc định của skill."
 }
 
-const promptHeader = `Bạn đang chạy trong Quê Hương Studio, không có người trả lời giữa chừng.
+const promptHeader = `Bạn đang chạy trong Song Studio, không có người trả lời giữa chừng.
 Dùng skill suno-que-huong ở %[1]s: đọc %[1]s/SKILL.md và đúng reference của bước này trước khi làm.
 Thư mục dự án: %[2]s
 Không hỏi lại người dùng. Khi cần quyết định, chọn mặc định của skill và ghi câu hỏi còn mở vào %[2]s/suno/notes.md.
@@ -382,7 +382,7 @@ for f in "$@"; do echo "== $(basename "$f")"; "$PY" scripts/analyze-reference.py
 	return nil, "", fmt.Errorf("unknown script action %q", action)
 }
 
-const skillPromptHeader = `Bạn đang sửa skill suno-que-huong ở %[1]s theo yêu cầu bên dưới, trong Quê Hương Studio (không có người trả lời giữa chừng).
+const skillPromptHeader = `Bạn đang sửa skill suno-que-huong ở %[1]s theo yêu cầu bên dưới, trong Song Studio (không có người trả lời giữa chừng).
 - Đọc SKILL.md và các file liên quan trước khi sửa. Giữ nguyên hành vi đã được chấp nhận; chỉ đổi đúng phần được yêu cầu.
 - Nếu có ~/.claude/skills/ak-skill-creator, làm theo luồng "update" của nó và chạy các bước kiểm tra (quick_validate, lint_cruft --routing); chạy test trong scripts/tests nếu có.
 - Không ghi khoá API hay thông tin bí mật vào skill.

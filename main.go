@@ -60,7 +60,7 @@ func main() {
 
 	// One studio per port: a second launch just brings the running one to the front.
 	if alreadyRunning(listen) {
-		fmt.Println("Quê Hương Studio đang chạy:", url)
+		fmt.Println("Song Studio đang chạy:", url)
 		if !*noOpen {
 			_ = exec.Command("open", url).Run()
 		}
@@ -92,7 +92,7 @@ func main() {
 			fatal(err)
 		}
 	}()
-	fmt.Println("Quê Hương Studio:", url)
+	fmt.Println("Song Studio:", url)
 	if !*noOpen {
 		_ = exec.Command("open", url).Run()
 	}

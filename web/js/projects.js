@@ -10,7 +10,7 @@ export function ProjectsPage() {
   useEffect(() => { api("/api/projects").then(setList).catch(toastError); }, [runsVersion]);
   return html`<div class="page">
     <div class="page-head">
-      <div><div class="eyebrow">Quê Hương Studio</div><h1>Bài hát</h1>
+      <div><div class="eyebrow">Song Studio</div><h1>Bài hát</h1>
         <div class="muted" style="margin-top:6px">Mỗi bài, thuộc thể loại nào cũng vậy, đi qua 9 bước: từ lời tới bài hát, video karaoke và bản nhạc. Bấm vào một bài để làm tiếp.</div></div>
       <${Btn} kind="primary" icon="plus" onClick=${() => setCreating(true)}>Bài mới</${Btn}>
     </div>

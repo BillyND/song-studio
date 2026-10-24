@@ -1,5 +1,5 @@
 // swift-tools-version:5.9
-// The native shell of Quê Hương Studio: a window around the Go server's web UI, plus Sparkle updates.
+// The native shell of Song Studio: a window around the Go server's web UI, plus Sparkle updates.
 import PackageDescription
 
 let package = Package(

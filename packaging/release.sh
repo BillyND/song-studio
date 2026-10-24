@@ -7,7 +7,7 @@ set -euo pipefail
 VERSION="$1"
 SKILL="$2"
 NOTES="${3:-${NOTES:-}}"
-REPO="BillyND/que-huong-studio-releases"
+REPO="BillyND/song-studio-releases"
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 OUT="$ROOT/out"
 SIGN="$ROOT/packaging/sparkle-tools/bin/sign_update"
@@ -38,7 +38,7 @@ cat > "$OUT/appcast.xml" <<EOF
   <channel>
     <title>Song Studio</title>
     <item>
-      <title>Phiên bản $VERSION</title>
+      <title>Version $VERSION</title>
       <pubDate>$(LC_ALL=C date -u '+%a, %d %b %Y %H:%M:%S +0000')</pubDate>
       <sparkle:version>$VERSION</sparkle:version>
       <sparkle:shortVersionString>$VERSION</sparkle:shortVersionString>

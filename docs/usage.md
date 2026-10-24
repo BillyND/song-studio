@@ -11,14 +11,14 @@ inside the app), which still serves the UI on `127.0.0.1:4317` only. Apple Silic
 ## Install and open
 
 For friends: download the newest `SongStudio-<version>.zip` from
-<https://github.com/BillyND/que-huong-studio-releases/releases>, unzip, drag the app to
+<https://github.com/BillyND/song-studio-releases/releases>, unzip, drag the app to
 Applications, open it, and the first time allow it under System Settings → Privacy & Security →
-"Open Anyway" (the app is not signed by Apple). The releases repo README says the same in Vietnamese.
+"Open Anyway" (the app is not signed by Apple). The releases repo README says the same.
 
 From source:
 
 ```bash
-cd ~/Coding/Personal/que-huong-studio
+cd ~/Coding/Personal/que-huong-studio   # the local folder keeps its old name; the repo is BillyND/song-studio
 make install        # tests, builds out/Song Studio.app, installs it to ~/Applications
                     # and links ~/.local/bin/que-huong-studio to the bundled server
 ```
@@ -28,14 +28,14 @@ app) is asked to quit first. Closing the window or Cmd+Q stops the server cleanl
 kept). Finder gives apps no PATH, so the app reads the
 login shell's PATH (Homebrew, uv, nvm, `~/.local/bin`) when it starts.
 
-The window behaves like a browser for the studio: Vietnamese menus with the Edit shortcuts
+The window behaves like a browser for the studio: menus in the interface language, with the Edit shortcuts
 (Cmd+C/V/X/A/Z), Cmd+R reload, zoom, `confirm()` dialogs, file pickers and drag-and-drop,
 downloads to `~/Downloads`, and links outside the studio open in the default browser. Trợ giúp →
 "Mở trong trình duyệt" opens the same studio in a browser.
 
 ## Updates
 
-Sparkle 2.10 checks <https://github.com/BillyND/que-huong-studio-releases/releases/latest/download/appcast.xml>
+Sparkle 2.10 checks <https://github.com/BillyND/song-studio-releases/releases/latest/download/appcast.xml>
 every hour (and on Song Studio → Kiểm tra cập nhật…), downloads in the background, verifies
 the EdDSA signature, and installs on quit or when the user clicks "Cài đặt cập nhật". Before
 relaunching it waits until no job is queued or running. Each release also carries a snapshot of
@@ -82,7 +82,8 @@ Server flags: `-addr 127.0.0.1:4317`, `-no-open`, `-config`, `-data`, `-bundled-
 | `~/.claude/skills/suno-que-huong/` | the skill the agents and scripts follow |
 | `~/.config/que-huong-studio/config.json` | settings (default agent, permission mode, concurrency, CLI paths, folders, image provider and model; never keys) |
 | login keychain, service `que-huong-studio` | image API keys (`image.hub`, `image.openai`, `image.gemini`), written through `security` on stdin |
-| `~/.local/share/que-huong-studio/runs/<id>/` | each run: `meta.json`, `events.jsonl`, raw `stdout.log`; the newest 300 are kept |
+| `~/.local/share/que-huong-studio/runs/<id>/` | each run: `meta.json`, `events.jsonl`, raw `stdout.log`; the newest 300 are kept, plus any a chat points at |
+| `~/.local/share/que-huong-studio/chats/<id>.json` | agent chats: agent, folder, CLI session, turns (run ids) and queued messages |
 | `~/.local/share/que-huong-studio/studio.log` | server log when started from the app (rotated to `studio.log.1` past 5 MB) |
 | `~/.config/suno-que-huong/aihub.key` | older hub key file; still read when the image script runs outside the studio, and importable into the keychain from Cài đặt |
 
@@ -198,9 +199,22 @@ Agent runs are headless, so they cannot ask for permission:
 The console shows each agent's replies, thinking and tool calls with their output. omp's computer-use calls appear as **CUA** with the agent's stated intent and the exact code it ran ("Agent điền form Suno" drives Chrome through the `cua_repl` MCP server of the spawned agent, never pressing Create).
 
 Every step prompt tells the agent to read the skill first, not to ask questions (open questions
-go to `suno/notes.md`), never to print keys, and to answer in Vietnamese. The skill page sends
+go to `suno/notes.md`), never to print keys, and to answer in the interface language. The skill page sends
 free-form change requests to an agent working inside the skill folder, which follows
 ak-skill-creator's update flow and runs the validators.
+
+### Agent chat
+
+The pink bubble at the bottom right (or Cmd+J) opens a chat panel on the right of any page. A new
+chat works in the open song's folder (the chip can be removed to work on all songs; the Skill page
+works on the skill). Each message is an agent run that resumes the previous turn's CLI session
+(`claude --resume`, `codex exec resume`, `omp --resume`), so the agent keeps the context and may ask
+back. A message sent while a turn runs waits in a queue and goes out when the turn ends; Cmd+Enter
+or **Dừng & gửi · Stop & send** stops the turn and sends at once. A finished step run has
+**Trả lời · Reply** to continue its session. Tool calls fold into one line until clicked. Chats are
+saved in `~/.local/share/que-huong-studio/chats/` and survive a restart; run-history pruning keeps
+the runs they point at. Resuming a long session re-reads it, so a short follow-up can still cost
+as much as the session's context.
 
 Stopping a run
 sends SIGTERM to its whole process group, then SIGKILL after 6 s. A run ends when its main

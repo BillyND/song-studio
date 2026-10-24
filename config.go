@@ -63,12 +63,39 @@ type Preset struct {
 }
 
 // defaultPresets are genre-neutral; each genre adds its own suggestions (genres.go).
-var defaultPresets = []Preset{
-	{"Không bộ gõ", "Không dùng bộ gõ: không trống, không cajon, không hi-hat, không shaker; nhịp do đàn và câu hát dẫn dắt."},
-	{"Giọng nữ ấm", "Giọng nữ trong, ấm, nhả chữ rõ."},
-	{"Giọng nam ấm", "Giọng nam trung ấm, tròn, nhả chữ rõ."},
-	{"Điệp khúc bùng nổ", "Verse nhẹ, điệp khúc dày và bùng nổ, điệp khúc cuối lên cao trào."},
-	{"Học phong cách, không chép", "Chỉ học phong cách từ bài mẫu (tiết tấu, dàn nhạc, màu giọng). Không chép giai điệu, lời hay câu nhạc đặc trưng của bài mẫu."},
+// Keyed by studio language: a list still equal to one language's defaults follows the language.
+var defaultPresets = map[string][]Preset{
+	"vi": {
+		{"Không bộ gõ", "Không dùng bộ gõ: không trống, không cajon, không hi-hat, không shaker; nhịp do đàn và câu hát dẫn dắt."},
+		{"Giọng nữ ấm", "Giọng nữ trong, ấm, nhả chữ rõ."},
+		{"Giọng nam ấm", "Giọng nam trung ấm, tròn, nhả chữ rõ."},
+		{"Điệp khúc bùng nổ", "Verse nhẹ, điệp khúc dày và bùng nổ, điệp khúc cuối lên cao trào."},
+		{"Học phong cách, không chép", "Chỉ học phong cách từ bài mẫu (tiết tấu, dàn nhạc, màu giọng). Không chép giai điệu, lời hay câu nhạc đặc trưng của bài mẫu."},
+	},
+	"en": {
+		{"No percussion", "No percussion: no drums, no cajon, no hi-hat, no shaker; the instruments and the vocal carry the rhythm."},
+		{"Warm female vocal", "A clear, warm female vocal with crisp diction."},
+		{"Warm male vocal", "A warm, rounded baritone male vocal with crisp diction."},
+		{"Explosive chorus", "Light verses, a dense and explosive chorus, the final chorus rising to a climax."},
+		{"Learn the style, don't copy", "Only learn the style of the reference songs (rhythm, arrangement, vocal colour). Do not copy their melody, lyrics or signature phrases."},
+	},
+}
+
+// defaultCredits prefill the credit lines of a new song, keyed like defaultPresets.
+var defaultCredits = map[string][][2]string{
+	"vi": {{"Sáng tác: ", ""}, {"Phổ nhạc: ", ""}},
+	"en": {{"Written by: ", ""}, {"Music by: ", ""}},
+}
+
+// localDefault returns the defaults for lang when cur is still one language's untouched
+// defaults, so switching the studio language swaps them; edited lists are kept as they are.
+func localDefault[T comparable](cur []T, defaults map[string][]T, lang string) []T {
+	for _, d := range defaults {
+		if len(cur) > 0 && slices.Equal(cur, d) {
+			return slices.Clone(defaults[lang])
+		}
+	}
+	return cur
 }
 
 var agentNames = []string{"claude", "omp", "codex"}
@@ -82,10 +109,11 @@ func defaultConfig(home string) Config {
 		PermissionMode: "full",
 		MaxConcurrent:  1,
 		MaxAgents:      3,
-		Credits:        [][2]string{{"Sáng tác: ", ""}, {"Phổ nhạc: ", ""}},
 		// Image is filled by normalizeImage: sharing defaultImage.Models here would let
-		// json.Unmarshal write a user's models into the package default
-		Presets: defaultPresets,
+		// json.Unmarshal write a user's models into the package default. Credits and
+		// Presets are cloned for the same reason.
+		Credits: slices.Clone(defaultCredits["vi"]),
+		Presets: slices.Clone(defaultPresets["vi"]),
 		Agents: map[string]AgentConfig{
 			"claude": {Bin: firstExisting("/opt/homebrew/bin/claude", "claude"), Model: ""},
 			"omp":    {Bin: firstExisting(filepath.Join(home, ".local", "bin", "omp"), "omp"), Model: ""},
@@ -155,20 +183,22 @@ func normalizeConfig(cfg *Config, home string) {
 	if cfg.MaxAgents > 6 {
 		cfg.MaxAgents = 6
 	}
-	if len(cfg.Credits) == 0 {
-		cfg.Credits = def.Credits
-	}
 	if !slices.Contains(uiLanguages, cfg.Language) {
 		cfg.Language = "vi"
 	}
+	if len(cfg.Credits) == 0 {
+		cfg.Credits = slices.Clone(defaultCredits[cfg.Language])
+	}
+	cfg.Credits = localDefault(cfg.Credits, defaultCredits, cfg.Language)
 	normalizeImage(&cfg.Image, cfg.ImageModel)
 	cfg.ImageModel = ""
 	if cfg.Agents == nil {
 		cfg.Agents = map[string]AgentConfig{}
 	}
 	if cfg.Presets == nil {
-		cfg.Presets = defaultPresets
+		cfg.Presets = slices.Clone(defaultPresets[cfg.Language])
 	}
+	cfg.Presets = localDefault(cfg.Presets, defaultPresets, cfg.Language)
 	kept := cfg.Presets[:0:0]
 	for _, p := range cfg.Presets {
 		if p.Label != "" && p.Text != "" {
@@ -203,7 +233,7 @@ func (s *ConfigStore) Get() Config {
 func (s *ConfigStore) Update(next Config, home string) (Config, error) {
 	normalizeConfig(&next, home)
 	if !validBaseURL(next.Image.BaseURL) {
-		return Config{}, errors.New("địa chỉ API ảnh (OpenAI-compatible) không hợp lệ: dùng https://…, hoặc http:// chỉ với 127.0.0.1 hay localhost")
+		return Config{}, errors.New(tr("địa chỉ API ảnh (OpenAI-compatible) không hợp lệ: dùng https://…, hoặc http:// chỉ với 127.0.0.1 hay localhost", "invalid image API address (OpenAI-compatible): use https://…, or http:// only with 127.0.0.1 or localhost"))
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()

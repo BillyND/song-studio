@@ -20,7 +20,7 @@ const keychainService = "que-huong-studio"
 // secretNames are the only keys the studio stores; each maps to an image provider.
 var secretNames = []string{"image.hub", "image.openai", "image.gemini"}
 
-var errNoSecret = errors.New("chưa có khoá")
+var errNoSecret = trErr("chưa có khoá", "no key set")
 
 // SecretStore keeps API keys out of config files, logs and process arguments.
 type SecretStore interface {
@@ -50,7 +50,7 @@ func (k keychainStore) Set(name, value string) error {
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil || stderr.Len() > 0 {
-		return fmt.Errorf("không lưu được vào Keychain: %s", strings.TrimSpace(stderr.String()))
+		return fmt.Errorf(tr("không lưu được vào Keychain: %s", "could not save to the Keychain: %s"), strings.TrimSpace(stderr.String()))
 	}
 	return nil
 }
@@ -161,7 +161,7 @@ func checkImageKey(cfg Config, provider, key string, client *http.Client) error 
 		base := "https://api.openai.com/v1"
 		if provider == "hub" {
 			if !validBaseURL(cfg.Image.BaseURL) {
-				return errors.New("địa chỉ API ảnh (OpenAI-compatible) không hợp lệ")
+				return errors.New(tr("địa chỉ API ảnh (OpenAI-compatible) không hợp lệ", "invalid image API address (OpenAI-compatible)"))
 			}
 			base = strings.TrimRight(cfg.Image.BaseURL, "/")
 		}
@@ -171,22 +171,22 @@ func checkImageKey(cfg Config, provider, key string, client *http.Client) error 
 		req, _ = http.NewRequest("GET", "https://generativelanguage.googleapis.com/v1beta/models?pageSize=1", nil)
 		req.Header.Set("x-goog-api-key", key)
 	default:
-		return fmt.Errorf("nguồn ảnh không hỗ trợ: %s", provider)
+		return fmt.Errorf(tr("nguồn ảnh không hỗ trợ: %s", "unsupported image provider: %s"), provider)
 	}
 	if client == nil {
 		client = &http.Client{Timeout: 20 * time.Second}
 	}
 	res, err := client.Do(req)
 	if err != nil {
-		return fmt.Errorf("không kết nối được: %v", err)
+		return fmt.Errorf(tr("không kết nối được: %v", "could not connect: %v"), err)
 	}
 	res.Body.Close()
 	switch {
 	case res.StatusCode == 200:
 		return nil
 	case res.StatusCode == 401 || res.StatusCode == 403:
-		return fmt.Errorf("khoá bị từ chối (%d)", res.StatusCode)
+		return fmt.Errorf(tr("khoá bị từ chối (%d)", "key rejected (%d)"), res.StatusCode)
 	default:
-		return fmt.Errorf("máy chủ trả %d", res.StatusCode)
+		return fmt.Errorf(tr("máy chủ trả %d", "the server returned %d"), res.StatusCode)
 	}
 }

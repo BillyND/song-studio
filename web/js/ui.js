@@ -1,18 +1,18 @@
 // Shared UI pieces used by every view.
-import { html, render, useState, useEffect, useRef, useLayoutEffect, store, useStore } from "./core.js";
+import { html, render, useState, useEffect, useRef, useLayoutEffect, store, useStore, t } from "./core.js";
 import { Icon } from "./icons.js";
 
 export const STATUS = {
-  queued: { label: "Đang chờ", cls: "" },
-  running: { label: "Đang chạy", cls: "run" },
-  succeeded: { label: "Hoàn thành", cls: "ok" },
-  failed: { label: "Thất bại", cls: "bad" },
-  stopped: { label: "Đã dừng", cls: "warn" },
-  interrupted: { label: "Gián đoạn", cls: "warn" },
-  done: { label: "Xong", cls: "ok" },
-  todo: { label: "Chưa làm", cls: "" },
-  stale: { label: "Cần làm lại", cls: "warn" },
-  skip: { label: "Bỏ qua", cls: "ok" },
+  queued: { label: t("Đang chờ"), cls: "" },
+  running: { label: t("Đang chạy"), cls: "run" },
+  succeeded: { label: t("Hoàn thành"), cls: "ok" },
+  failed: { label: t("Thất bại"), cls: "bad" },
+  stopped: { label: t("Đã dừng"), cls: "warn" },
+  interrupted: { label: t("Gián đoạn"), cls: "warn" },
+  done: { label: t("Xong"), cls: "ok" },
+  todo: { label: t("Chưa làm"), cls: "" },
+  stale: { label: t("Cần làm lại"), cls: "warn" },
+  skip: { label: t("Bỏ qua"), cls: "ok" },
 };
 
 export function StatusPill({ status, label }) {
@@ -48,8 +48,8 @@ export function AgentPicker({ value, onChange, model, onModel }) {
   const boot = useStore((s) => s.boot);
   const agents = boot?.agents || [];
   return html`<span class="agent-pick">
-    <${Seg} value=${value} onChange=${onChange} options=${agents.map((a) => ({ value: a.name, label: a.name + (a.available ? "" : " (thiếu)") }))} />
-    ${onModel && html`<input class="input" style="width:150px;height:34px" placeholder="model (mặc định)" value=${model} onInput=${(e) => onModel(e.target.value)} />`}
+    <${Seg} value=${value} onChange=${onChange} options=${agents.map((a) => ({ value: a.name, label: a.available ? a.name : t("{name} (thiếu)", { name: a.name }) }))} />
+    ${onModel && html`<input class="input" style="width:150px;height:34px" placeholder=${t("model (mặc định)")} value=${model} onInput=${(e) => onModel(e.target.value)} />`}
   </span>`;
 }
 
@@ -82,7 +82,7 @@ export function Modal({ title, onClose, children, footer }) {
   }, []);
   return html`<${Portal}><div class="modal-back" onClick=${(e) => e.target === e.currentTarget && onClose()}>
     <div class="modal" role="dialog" aria-modal="true" aria-label=${title}>
-      <div class="card-head modal-head"><h2>${title}</h2><span class="spacer"></span><${Btn} kind="ghost" size="sm" icon="x" title="Đóng" onClick=${onClose} /></div>
+      <div class="card-head modal-head"><h2>${title}</h2><span class="spacer"></span><${Btn} kind="ghost" size="sm" icon="x" title=${t("Đóng")} onClick=${onClose} /></div>
       <div class="card-body modal-body">${children}</div>
       ${footer && html`<div class="card-head modal-foot">${footer}</div>`}
     </div></div></${Portal}>`;
@@ -180,16 +180,16 @@ export function Field({ label, children, hint }) {
   return html`<label class="field">${label}${children}${hint && html`<span class="muted small" style="font-weight:400">${hint}</span>`}</label>`;
 }
 
-// GenrePicker chooses a song's genre and sung language; the UI itself stays Vietnamese.
+// GenrePicker chooses a song's genre and sung language; the sung language is independent of the UI language.
 export function GenrePicker({ genre, language, onChange }) {
   const genres = useStore((s) => s.boot?.genres || []);
   const languages = useStore((s) => s.boot?.languages || []);
   return html`<div class="form-row">
-    <div class="grow"><${Field} label="Thể loại" hint="Chọn để agent phối và lên cảnh đúng chất; để trống thì suy ra từ bài mẫu.">
-      <select class="select" value=${genre || ""} onChange=${(e) => onChange({ genre: e.target.value })} aria-label="Thể loại">
-        <option value="">Chưa chọn</option>${genres.map((g) => html`<option value=${g.id}>${g.label}</option>`)}</select></${Field}></div>
-    <div class="grow"><${Field} label="Ngôn ngữ hát" hint="Dùng khi canh lời theo giọng hát.">
-      <select class="select" value=${language || "vi"} onChange=${(e) => onChange({ language: e.target.value })} aria-label="Ngôn ngữ hát">
+    <div class="grow"><${Field} label=${t("Thể loại")} hint=${t("Chọn để agent phối và lên cảnh đúng chất; để trống thì suy ra từ bài mẫu.")}>
+      <select class="select" value=${genre || ""} onChange=${(e) => onChange({ genre: e.target.value })} aria-label=${t("Thể loại")}>
+        <option value="">${t("Chưa chọn")}</option>${genres.map((g) => html`<option value=${g.id}>${g.label}</option>`)}</select></${Field}></div>
+    <div class="grow"><${Field} label=${t("Ngôn ngữ hát")} hint=${t("Dùng khi canh lời theo giọng hát.")}>
+      <select class="select" value=${language || "vi"} onChange=${(e) => onChange({ language: e.target.value })} aria-label=${t("Ngôn ngữ hát")}>
         ${languages.map((l) => html`<option value=${l.id}>${l.label}</option>`)}</select></${Field}></div>
   </div>`;
 }

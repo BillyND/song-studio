@@ -73,7 +73,7 @@ func summarizeInput(raw json.RawMessage) string {
 			s := fmt.Sprint(v)
 			if k == "file_path" || k == "path" {
 				if old, ok := m["old_string"]; ok && old != "" {
-					return s + "  (sửa nội dung)"
+					return s + tr("  (sửa nội dung)", "  (edit)")
 				}
 			}
 			return clip(s)
@@ -172,7 +172,7 @@ func (p *claudeParser) Line(line string, emit func(Event), u *Usage) {
 	case "system":
 		if ev.Subtype == "init" {
 			u.Session, u.Model = ev.Session, ev.Model
-			emit(Event{Kind: "system", Title: "Phiên Claude bắt đầu", Body: strings.TrimSpace("model " + ev.Model + "\ncwd " + ev.Cwd)})
+			emit(Event{Kind: "system", Title: tr("Phiên Claude bắt đầu", "Claude session started"), Body: strings.TrimSpace("model " + ev.Model + "\ncwd " + ev.Cwd)})
 		}
 	case "assistant":
 		if ev.Message.Model != "" {
@@ -201,14 +201,14 @@ func (p *claudeParser) Line(line string, emit func(Event), u *Usage) {
 	case "result":
 		u.CostUSD = ev.CostUSD
 		u.InputTokens, u.OutputTokens = ev.Usage.In, ev.Usage.Out
-		title := fmt.Sprintf("Xong sau %d lượt · %.1fs", ev.NumTurns, float64(ev.Duration)/1000)
+		title := fmt.Sprintf(tr("Xong sau %d lượt · %.1fs", "Done after %d turns · %.1fs"), ev.NumTurns, float64(ev.Duration)/1000)
 		emit(Event{Kind: "result", Title: title, Body: clip(ev.Result), Error: ev.IsError || ev.Subtype != "success"})
 	}
 }
 
 func subTitle(sub bool) string {
 	if sub {
-		return "agent phụ"
+		return tr("agent phụ", "subagent")
 	}
 	return ""
 }
@@ -260,7 +260,7 @@ func (p *codexParser) Line(line string, emit func(Event), u *Usage) {
 	switch ev.Type {
 	case "thread.started":
 		u.Session = ev.ThreadID
-		emit(Event{Kind: "system", Title: "Phiên Codex bắt đầu", Body: "thread " + ev.ThreadID})
+		emit(Event{Kind: "system", Title: tr("Phiên Codex bắt đầu", "Codex session started"), Body: "thread " + ev.ThreadID})
 	case "item.started":
 		if it.Type == "command_execution" {
 			emit(Event{Kind: "tool_call", Tool: "shell", Ref: it.ID, Body: clip(it.Command)})
@@ -293,14 +293,14 @@ func (p *codexParser) Line(line string, emit func(Event), u *Usage) {
 				}
 				lines = append(lines, mark+" "+t.Text)
 			}
-			emit(Event{Kind: "system", Title: "Kế hoạch", Body: strings.Join(lines, "\n")})
+			emit(Event{Kind: "system", Title: tr("Kế hoạch", "Plan"), Body: strings.Join(lines, "\n")})
 		case "error":
 			emit(Event{Kind: "error", Body: clip(it.Text)})
 		}
 	case "turn.completed":
 		u.InputTokens += ev.Usage.In
 		u.OutputTokens += ev.Usage.Out
-		emit(Event{Kind: "result", Title: fmt.Sprintf("Xong lượt · %d token vào, %d token ra", ev.Usage.In, ev.Usage.Out)})
+		emit(Event{Kind: "result", Title: fmt.Sprintf(tr("Xong lượt · %d token vào, %d token ra", "Turn done · %d tokens in, %d tokens out"), ev.Usage.In, ev.Usage.Out)})
 	case "turn.failed", "error":
 		msg := ev.Error.Message
 		if msg == "" {
@@ -390,7 +390,7 @@ func (p *ompParser) Line(line string, emit func(Event), u *Usage) {
 	switch ev.Type {
 	case "session":
 		u.Session = ev.ID
-		emit(Event{Kind: "system", Title: "Phiên omp bắt đầu", Body: "cwd " + ev.Cwd})
+		emit(Event{Kind: "system", Title: tr("Phiên omp bắt đầu", "omp session started"), Body: "cwd " + ev.Cwd})
 	case "message_end":
 		m := ev.Message
 		if m.Role != "assistant" {
@@ -424,7 +424,7 @@ func (p *ompParser) Line(line string, emit func(Event), u *Usage) {
 	case "tool_execution_end":
 		emit(Event{Kind: "tool_result", Ref: ev.ToolCallID, Tool: ev.ToolName, Body: clip(contentText(ev.Result.Content)), Error: ev.IsError})
 	case "agent_end":
-		emit(Event{Kind: "result", Title: fmt.Sprintf("Xong · %d token vào, %d token ra", u.InputTokens, u.OutputTokens), Body: clip(p.lastText)})
+		emit(Event{Kind: "result", Title: fmt.Sprintf(tr("Xong · %d token vào, %d token ra", "Done · %d tokens in, %d tokens out"), u.InputTokens, u.OutputTokens), Body: clip(p.lastText)})
 	case "error":
 		emit(Event{Kind: "error", Body: clip(ev.Error), Error: true})
 	}

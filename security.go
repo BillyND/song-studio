@@ -4,7 +4,6 @@ import (
 	"crypto/rand"
 	"crypto/subtle"
 	"encoding/hex"
-	"errors"
 	"net"
 	"net/http"
 	"os"
@@ -65,7 +64,7 @@ func guard(addr, token string, next http.Handler) http.Handler {
 	})
 }
 
-var errOutside = errors.New("path is outside the allowed directory")
+var errOutside = trErr("đường dẫn nằm ngoài thư mục cho phép", "path is outside the allowed directory")
 
 // safeJoin resolves rel inside root and refuses anything that escapes it,
 // including through symlinks that already exist on disk.

@@ -18,7 +18,7 @@ final class ServerProcess {
     func start() throws {
         let p = Process()
         guard let bin = Bundle.main.url(forAuxiliaryExecutable: "que-huong-studio") else {
-            throw NSError(domain: "studio", code: 1, userInfo: [NSLocalizedDescriptionKey: "Thiếu chương trình máy chủ trong app"])
+            throw NSError(domain: "studio", code: 1, userInfo: [NSLocalizedDescriptionKey: L("Thiếu chương trình máy chủ trong app", "The app is missing its server program")])
         }
         p.executableURL = bin
         var args = ["-no-open"]

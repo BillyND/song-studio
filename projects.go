@@ -79,7 +79,6 @@ type ProjectDetail struct {
 	ConfigSHA  string          `json:"configSha"`
 	Refs       []RefFile       `json:"refs"`
 	Brief      string          `json:"brief"`
-	Profile    string          `json:"profile"` // suno/profile.md written from the references and brief
 	Steps      []Step          `json:"steps"`
 	Sheet      *SheetInfo      `json:"sheet,omitempty"`
 }
@@ -102,6 +101,8 @@ func readSheet(dir string) *SheetInfo {
 	var raw struct {
 		Base       string  `json:"base"`
 		KeyVi      string  `json:"key_vi"`
+		KeyEn      string  `json:"key_en"`
+		KeyRaw     string  `json:"key"` // music21's name, e.g. "g minor", "b- major"
 		SungKey    string  `json:"sung_key"`
 		TargetKey  string  `json:"target_key"`
 		Meter      string  `json:"meter"`
@@ -115,7 +116,7 @@ func readSheet(dir string) *SheetInfo {
 	if !exists(filepath.Join(dir, raw.Base+".musicxml")) {
 		return nil
 	}
-	s := &SheetInfo{XML: raw.Base + ".musicxml", Key: raw.KeyVi, SungKey: raw.SungKey, TargetKey: raw.TargetKey,
+	s := &SheetInfo{XML: raw.Base + ".musicxml", Key: tr(raw.KeyVi, firstNonEmpty(raw.KeyEn, keyNameEn(raw.KeyRaw), raw.KeyVi)), // sheets made before key_en existed SungKey: raw.SungKey, TargetKey: raw.TargetKey,
 		Meter: raw.Meter, BPM: raw.BPM, PitchMatch: raw.PitchMatch, Pages: listRel(dir, "work/sheet", ".png")}
 	if exists(filepath.Join(dir, raw.Base+".pdf")) {
 		s.PDF = raw.Base + ".pdf"
@@ -235,7 +236,6 @@ func (p Projects) Detail(slug string, active map[string]string) (ProjectDetail, 
 	d.SunoStyle = readText(filepath.Join(dir, "suno", "style.txt"))
 	d.Notes = readText(filepath.Join(dir, "suno", "notes.md"))
 	d.Brief = readText(filepath.Join(dir, "brief.md"))
-	d.Profile = readText(filepath.Join(dir, "suno", "profile.md"))
 	d.Refs = listRefs(dir)
 	if pc.Audio != "" && exists(pc.Audio) {
 		if rel, err := filepath.Rel(dir, pc.Audio); err == nil && !strings.HasPrefix(rel, "..") {
@@ -274,15 +274,15 @@ func (p Projects) Detail(slug string, active map[string]string) (ProjectDetail, 
 func deriveSteps(dir string, pc projectConfig, d ProjectDetail, active map[string]string) []Step {
 	mt := func(rel string) time.Time { return mtime(filepath.Join(dir, rel)) }
 	steps := []Step{
-		{ID: "lyrics", Title: "Lời, bài mẫu & yêu cầu"},
-		{ID: "suno", Title: "Prompt Suno"},
-		{ID: "audio", Title: "Nhạc từ Suno"},
-		{ID: "align", Title: "Canh lời từng chữ"},
-		{ID: "trim", Title: "Rút ngắn intro"},
-		{ID: "scenes", Title: "Cảnh & ảnh AI"},
-		{ID: "stills", Title: "Xem trước khung hình"},
-		{ID: "render", Title: "Xuất video karaoke"},
-		{ID: "sheet", Title: "Bản nhạc"},
+		{ID: "lyrics", Title: tr("Lời, bài mẫu & yêu cầu", "Lyrics, references & brief")},
+		{ID: "suno", Title: tr("Prompt Suno", "Suno prompt")},
+		{ID: "audio", Title: tr("Nhạc từ Suno", "Suno audio")},
+		{ID: "align", Title: tr("Canh lời từng chữ", "Word-by-word alignment")},
+		{ID: "trim", Title: tr("Rút ngắn intro", "Trim intro")},
+		{ID: "scenes", Title: tr("Cảnh & ảnh AI", "Scenes & AI images")},
+		{ID: "stills", Title: tr("Xem trước khung hình", "Preview frames")},
+		{ID: "render", Title: tr("Xuất video karaoke", "Render karaoke video")},
+		{ID: "sheet", Title: tr("Bản nhạc", "Sheet music")},
 	}
 	set := func(id, status, detail string) {
 		for i := range steps {
@@ -293,14 +293,14 @@ func deriveSteps(dir string, pc projectConfig, d ProjectDetail, active map[strin
 	}
 	lines := strings.Count(strings.TrimSpace(d.Lyrics), "\n") + 1
 	if strings.TrimSpace(d.Lyrics) == "" {
-		set("lyrics", "todo", "Chưa có lời")
+		set("lyrics", "todo", tr("Chưa có lời", "No lyrics yet"))
 	} else {
-		parts := []string{fmt.Sprintf("%d dòng", lines)}
+		parts := []string{fmt.Sprintf(tr("%d dòng", "%d lines"), lines)}
 		if len(d.Refs) > 0 {
-			parts = append(parts, fmt.Sprintf("%d bài mẫu", len(d.Refs)))
+			parts = append(parts, fmt.Sprintf(tr("%d bài mẫu", "%d references"), len(d.Refs)))
 		}
 		if strings.TrimSpace(d.Brief) != "" {
-			parts = append(parts, "có yêu cầu")
+			parts = append(parts, tr("có yêu cầu", "has brief"))
 		}
 		set("lyrics", "done", strings.Join(parts, " · "))
 	}
@@ -311,24 +311,24 @@ func deriveSteps(dir string, pc projectConfig, d ProjectDetail, active map[strin
 	}
 	switch {
 	case d.SunoLyrics == "" || d.SunoStyle == "":
-		set("suno", "todo", "Chưa tạo prompt")
+		set("suno", "todo", tr("Chưa tạo prompt", "No prompt yet"))
 	case newestOf(dir, inputs).After(mt("suno/style.txt")):
-		set("suno", "stale", "Lời, yêu cầu hoặc bài mẫu đã đổi sau khi tạo prompt")
+		set("suno", "stale", tr("Lời, yêu cầu hoặc bài mẫu đã đổi sau khi tạo prompt", "Lyrics, brief or references changed after the prompt was made"))
 	default:
-		set("suno", "done", fmt.Sprintf("Styles %d/1000 ký tự", len([]rune(strings.TrimSpace(d.SunoStyle)))))
+		set("suno", "done", fmt.Sprintf(tr("Styles %d/1000 ký tự", "Styles %d/1000 characters"), len([]rune(strings.TrimSpace(d.SunoStyle)))))
 	}
 	if d.Audio == "" {
-		set("audio", "todo", "Tải bản M4A từ Suno rồi thêm vào đây")
+		set("audio", "todo", tr("Tải bản M4A từ Suno rồi thêm vào đây", "Download the M4A from Suno and add it here"))
 	} else {
 		set("audio", "done", d.Audio)
 	}
 	switch {
 	case len(d.Timings) == 0:
-		set("align", "todo", "Chưa canh lời")
+		set("align", "todo", tr("Chưa canh lời", "Not aligned yet"))
 	case pc.Audio != "" && mtime(pc.Audio).After(mt("work/timings.json")) && len(pc.IntroCut) == 0:
-		set("align", "stale", "Nhạc mới hơn timing")
+		set("align", "stale", tr("Nhạc mới hơn timing", "Audio is newer than the timing"))
 	default:
-		set("align", "done", fmt.Sprintf("%d câu", len(d.Timings)))
+		set("align", "done", fmt.Sprintf(tr("%d câu", "%d lines"), len(d.Timings)))
 	}
 	first := 0.0
 	if len(d.Timings) > 0 {
@@ -336,13 +336,13 @@ func deriveSteps(dir string, pc projectConfig, d ProjectDetail, active map[strin
 	}
 	switch {
 	case len(pc.IntroCut) == 2:
-		set("trim", "done", fmt.Sprintf("Đã cắt %.1fs → %.1fs, hát ở %.1fs", pc.IntroCut[0], pc.IntroCut[1], first))
+		set("trim", "done", fmt.Sprintf(tr("Đã cắt %.1fs → %.1fs, hát ở %.1fs", "Cut %.1fs → %.1fs, vocals at %.1fs"), pc.IntroCut[0], pc.IntroCut[1], first))
 	case len(d.Timings) == 0:
-		set("trim", "todo", "Cần canh lời trước")
+		set("trim", "todo", tr("Cần canh lời trước", "Align the lyrics first"))
 	case first <= 15:
-		set("trim", "skip", fmt.Sprintf("Giọng vào ở %.1fs, không cần cắt", first))
+		set("trim", "skip", fmt.Sprintf(tr("Giọng vào ở %.1fs, không cần cắt", "Vocals start at %.1fs, no cut needed"), first))
 	default:
-		set("trim", "todo", fmt.Sprintf("Giọng vào ở %.1fs, nên cắt về ~11s", first))
+		set("trim", "todo", fmt.Sprintf(tr("Giọng vào ở %.1fs, nên cắt về ~11s", "Vocals start at %.1fs, trim to about 11s"), first))
 	}
 	need, have := 0, 0
 	for _, s := range pc.Scenes {
@@ -356,11 +356,11 @@ func deriveSteps(dir string, pc projectConfig, d ProjectDetail, active map[strin
 	}
 	switch {
 	case need == 0:
-		set("scenes", "todo", "Chưa lên danh sách cảnh")
+		set("scenes", "todo", tr("Chưa lên danh sách cảnh", "No scene list yet"))
 	case have < need:
-		set("scenes", "todo", fmt.Sprintf("%d/%d ảnh", have, need))
+		set("scenes", "todo", fmt.Sprintf(tr("%d/%d ảnh", "%d/%d images"), have, need))
 	default:
-		set("scenes", "done", fmt.Sprintf("%d cảnh, đủ ảnh", len(pc.Scenes)))
+		set("scenes", "done", fmt.Sprintf(tr("%d cảnh, đủ ảnh", "%d scenes, all images ready"), len(pc.Scenes)))
 	}
 	stamps := readStamps(dir)
 	current := videoInputsHash(dir)
@@ -373,27 +373,27 @@ func deriveSteps(dir string, pc projectConfig, d ProjectDetail, active map[strin
 	}
 	switch {
 	case len(d.Stills) == 0:
-		set("stills", "todo", "Chưa xem trước")
+		set("stills", "todo", tr("Chưa xem trước", "Not previewed yet"))
 	case outdated("stills", d.Stills):
-		set("stills", "stale", fmt.Sprintf("%d khung hình, cấu hình video đã đổi", len(d.Stills)))
+		set("stills", "stale", fmt.Sprintf(tr("%d khung hình, cấu hình video đã đổi", "%d frames, video settings changed"), len(d.Stills)))
 	default:
-		set("stills", "done", fmt.Sprintf("%d khung hình", len(d.Stills)))
+		set("stills", "done", fmt.Sprintf(tr("%d khung hình", "%d frames"), len(d.Stills)))
 	}
 	switch {
 	case len(d.Videos) == 0:
-		set("render", "todo", "Chưa xuất")
+		set("render", "todo", tr("Chưa xuất", "Not rendered yet"))
 	case outdated("render", d.Videos):
-		set("render", "stale", "Cảnh, lời hoặc nhạc đã đổi sau lần xuất trước")
+		set("render", "stale", tr("Cảnh, lời hoặc nhạc đã đổi sau lần xuất trước", "Scenes, lyrics or audio changed since the last render"))
 	default:
 		set("render", "done", d.Videos[len(d.Videos)-1])
 	}
 	switch {
 	case len(d.Timings) == 0:
-		set("sheet", "todo", "Cần canh lời trước")
+		set("sheet", "todo", tr("Cần canh lời trước", "Align the lyrics first"))
 	case d.Sheet == nil:
-		set("sheet", "todo", "Chưa chép bản nhạc")
+		set("sheet", "todo", tr("Chưa chép bản nhạc", "Not transcribed yet"))
 	case mt(d.Sheet.XML).Before(mt("work/timings.json")):
-		set("sheet", "stale", "Lời hoặc nhạc đã đổi sau lần chép trước")
+		set("sheet", "stale", tr("Lời hoặc nhạc đã đổi sau lần chép trước", "Lyrics or audio changed since the last transcription"))
 	default:
 		set("sheet", "done", fmt.Sprintf("%s · %s · ♩ = %.0f", d.Sheet.Key, d.Sheet.Meter, d.Sheet.BPM))
 	}
@@ -409,13 +409,13 @@ func deriveSteps(dir string, pc projectConfig, d ProjectDetail, active map[strin
 func (p Projects) Create(title, subtitle, lyrics string, credits [][2]string, genre, language string) (string, error) {
 	title = strings.TrimSpace(title)
 	if title == "" {
-		return "", errors.New("cần tên bài")
+		return "", errors.New(tr("cần tên bài", "a song title is required"))
 	}
 	theme := "truyen-thong"
 	if genre != "" {
 		g := findGenre(genre)
 		if g == nil {
-			return "", errors.New("thể loại không hợp lệ")
+			return "", errors.New(tr("thể loại không hợp lệ", "invalid genre"))
 		}
 		theme = g.Theme
 	}
@@ -423,7 +423,7 @@ func (p Projects) Create(title, subtitle, lyrics string, credits [][2]string, ge
 		language = "vi"
 	}
 	if !validLanguage(language) {
-		return "", errors.New("ngôn ngữ không hợp lệ")
+		return "", errors.New(tr("ngôn ngữ không hợp lệ", "invalid language"))
 	}
 	if err := os.MkdirAll(p.root(), 0o755); err != nil {
 		return "", err
@@ -457,7 +457,7 @@ func (p Projects) Create(title, subtitle, lyrics string, credits [][2]string, ge
 }
 
 // editable files the UI may overwrite, relative to the project dir
-var editableProjectFiles = map[string]bool{"lyrics.txt": true, "suno/lyrics.txt": true, "suno/style.txt": true, "suno/notes.md": true, "project.json": true, "brief.md": true, "suno/profile.md": true}
+var editableProjectFiles = map[string]bool{"lyrics.txt": true, "suno/lyrics.txt": true, "suno/style.txt": true, "suno/notes.md": true, "project.json": true, "brief.md": true}
 
 // WriteFileIf saves like WriteFile but refuses when sha no longer matches the file on disk
 // (an agent may have changed it since the page loaded). An empty sha skips the check.
@@ -477,7 +477,7 @@ func (p Projects) WriteFileIf(slug, rel, content, sha string) error {
 
 func (p Projects) WriteFile(slug, rel, content string) error {
 	if !editableProjectFiles[rel] {
-		return errors.New("file is not editable")
+		return errors.New(tr("không sửa được file này", "file is not editable"))
 	}
 	dir, err := p.dir(slug)
 	if err != nil {
@@ -486,7 +486,7 @@ func (p Projects) WriteFile(slug, rel, content string) error {
 	if rel == "project.json" {
 		var v map[string]any
 		if err := json.Unmarshal([]byte(content), &v); err != nil {
-			return fmt.Errorf("project.json không hợp lệ: %w", err)
+			return fmt.Errorf(tr("project.json không hợp lệ: %w", "invalid project.json: %w"), err)
 		}
 		return writeJSONAtomic(filepath.Join(dir, rel), v, 0o644)
 	}
@@ -501,7 +501,7 @@ func (p Projects) ImportAudio(slug, name string, src io.Reader) (string, error) 
 	}
 	ext := strings.ToLower(filepath.Ext(name))
 	if !contains([]string{".m4a", ".mp4", ".mp3", ".wav", ".aac", ".flac", ".ogg"}, ext) {
-		return "", errors.New("chỉ nhận file âm thanh (nên dùng M4A từ Suno)")
+		return "", errors.New(tr("chỉ nhận file âm thanh (nên dùng M4A từ Suno)", "audio files only (the M4A from Suno works best)"))
 	}
 	pc, raw := readConfig(dir)
 	dst := filepath.Join(dir, safeFileName(pc.Title+" "+pc.Subtitle, slug)+ext)
@@ -600,7 +600,7 @@ func (p Projects) AddRef(slug, name string, src io.Reader) (string, error) {
 	}
 	ext := strings.ToLower(filepath.Ext(name))
 	if !contains(refExts, ext) {
-		return "", errors.New("chỉ nhận file nhạc hoặc video (mp3, m4a, wav, mp4, webm…)")
+		return "", errors.New(tr("chỉ nhận file nhạc hoặc video (mp3, m4a, wav, mp4, webm…)", "audio or video files only (mp3, m4a, wav, mp4, webm…)"))
 	}
 	if err := os.MkdirAll(filepath.Join(dir, "ref"), 0o755); err != nil {
 		return "", err
@@ -678,9 +678,9 @@ end run`
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second) // first use asks for Automation permission
 		defer cancel()
 		if out, ferr := exec.CommandContext(ctx, "osascript", "-e", script, src).CombinedOutput(); ferr != nil {
-			return "", fmt.Errorf("không chuyển được vào Thùng rác: %s", strings.TrimSpace(string(out)))
+			return "", fmt.Errorf(tr("không chuyển được vào Thùng rác: %s", "could not move to the Trash: %s"), strings.TrimSpace(string(out)))
 		}
-		return "Thùng rác của ổ chứa bài", nil
+		return tr("Thùng rác của ổ chứa bài", "the Trash on the song's drive"), nil
 	}
 	return dst, err
 }
@@ -801,4 +801,23 @@ func newestMtime(dir string) time.Time {
 		}
 	}
 	return t
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, v := range values {
+		if v != "" {
+			return v
+		}
+	}
+	return ""
+}
+
+// keyNameEn turns music21's key name ("g minor", "b- major", "f# minor") into "G minor", "B♭ major", "F♯ minor".
+func keyNameEn(k string) string {
+	tonic, mode, ok := strings.Cut(strings.TrimSpace(k), " ")
+	if !ok || tonic == "" {
+		return ""
+	}
+	name := strings.ToUpper(tonic[:1]) + strings.NewReplacer("-", "♭", "#", "♯").Replace(tonic[1:])
+	return name + " " + mode
 }

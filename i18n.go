@@ -18,3 +18,11 @@ func tr(vi, en string) string {
 	}
 	return vi
 }
+
+// trError is a sentinel error whose message follows the studio language when it is shown,
+// so a package-level error still matches with errors.Is after the language changes.
+type trError struct{ vi, en string }
+
+func (e *trError) Error() string { return tr(e.vi, e.en) }
+
+func trErr(vi, en string) error { return &trError{vi, en} }

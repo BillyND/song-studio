@@ -1,5 +1,5 @@
 // Live run console: subscribes to a run's SSE stream and renders a readable timeline.
-import { html, useState, useEffect, useRef, useMemo, api, store, toastError, bumpRuns, runDuration, go } from "./core.js";
+import { html, useState, useEffect, useRef, useMemo, api, store, toastError, bumpRuns, runDuration, go, t, lang } from "./core.js";
 import { Icon } from "./icons.js";
 import { Btn, StatusPill, AgentIcon, Markdown } from "./ui.js";
 
@@ -77,7 +77,7 @@ function groupEvents(events) {
 }
 
 function Ev({ e }) {
-  const label = (icon, name, extra) => html`<div class="ev-label"><b>${name}</b>${extra}<span class="spacer"></span>${e.ts && new Date(e.ts).toLocaleTimeString("vi-VN")}</div>`;
+  const label = (icon, name, extra) => html`<div class="ev-label"><b>${name}</b>${extra}<span class="spacer"></span>${e.ts && new Date(e.ts).toLocaleTimeString(lang === "en" ? "en-GB" : "vi-VN")}</div>`;
   switch (e.kind) {
     case "text":
       return html`<div class="ev text"><div class="ev-icon"><${Icon} name="sparkles" size=${14} /></div><div class="ev-body">
@@ -87,28 +87,28 @@ function Ev({ e }) {
     case "tool_call": {
       const r = e.result;
       return html`<div class=${"ev tool" + (r?.error ? " err" : "")}><div class="ev-icon"><${Icon} name="wrench" size=${14} /></div><div class="ev-body">
-        ${label("wrench", e.tool || "tool", html`${e.title && html`<span class="ellipsis" style="max-width:60%">${e.title}</span>`}${!r ? html`<span class="pill run"><span class="dot"></span>đang chạy</span>` : r.error ? html`<span class="pill bad">lỗi</span>` : null}`)}
+        ${label("wrench", e.tool || "tool", html`${e.title && html`<span class="ellipsis" style="max-width:60%">${e.title}</span>`}${!r ? html`<span class="pill run"><span class="dot"></span>${t("đang chạy")}</span>` : r.error ? html`<span class="pill bad">${t("lỗi")}</span>` : null}`)}
         <div class="tool-card">${e.body && html`<div class="tool-cmd">${e.body}</div>`}
           ${r && html`<details class=${"tool-out" + (r.error ? " err" : "")} open=${r.error}>
-            <summary><${Icon} name="chevron" size=${12} />${r.body ? `Kết quả · ${r.body.split("\n").length} dòng` : "Không có đầu ra"}</summary>
+            <summary><${Icon} name="chevron" size=${12} />${r.body ? t("Kết quả · {n} dòng", { n: r.body.split("\n").length }) : t("Không có đầu ra")}</summary>
             ${r.body && html`<pre>${r.body}</pre>`}</details>`}
         </div></div></div>`;
     }
     case "tool_result":
-      return html`<div class="ev tool"><div class="ev-icon"><${Icon} name="terminal" size=${14} /></div><div class="ev-body">${label("", "Kết quả")}<pre class="logs">${e.body}</pre></div></div>`;
+      return html`<div class="ev tool"><div class="ev-icon"><${Icon} name="terminal" size=${14} /></div><div class="ev-body">${label("", t("Kết quả"))}<pre class="logs">${e.body}</pre></div></div>`;
     case "logs":
-      return html`<div class="ev"><div class="ev-icon"><${Icon} name="terminal" size=${14} /></div><div class="ev-body">${label("", "Nhật ký")}
+      return html`<div class="ev"><div class="ev-icon"><${Icon} name="terminal" size=${14} /></div><div class="ev-body">${label("", t("Nhật ký"))}
         <div class="logs">${e.lines.map((l) => html`<div class=${l.kind === "stderr" ? "se" : ""}>${l.body}</div>`)}</div></div></div>`;
     case "result":
       return html`<div class=${"ev result" + (e.error ? " err" : "")}><div class="ev-icon"><${Icon} name=${e.error ? "alert" : "check"} size=${14} /></div><div class="ev-body">
-        ${label("", e.error ? "Kết thúc có lỗi" : "Kết quả")}<div class=${"result-card" + (e.error ? " bad" : "")}>
+        ${label("", e.error ? t("Kết thúc có lỗi") : t("Kết quả"))}<div class=${"result-card" + (e.error ? " bad" : "")}>
         ${e.title && html`<div class="small" style="font-weight:650;margin-bottom:4px">${e.title}</div>`}${e.body && html`<${Markdown} text=${e.body} />`}</div></div></div>`;
     case "error":
-      return html`<div class="ev err"><div class="ev-icon"><${Icon} name="alert" size=${14} /></div><div class="ev-body">${label("", "Lỗi")}<pre class="logs" style="color:#fca5a5">${e.body}</pre></div></div>`;
+      return html`<div class="ev err"><div class="ev-icon"><${Icon} name="alert" size=${14} /></div><div class="ev-body">${label("", t("Lỗi"))}<pre class="logs" style="color:#fca5a5">${e.body}</pre></div></div>`;
     case "status":
       return html`<div class="status-line"><span title=${e.body}>${e.title}${e.body && html`<span class="mono" style="font-size:11px"> · ${e.body}</span>`}</span></div>`;
     case "system":
-      return html`<div class="ev"><div class="ev-icon"><${Icon} name="cpu" size=${14} /></div><div class="ev-body">${label("", e.title || "Hệ thống")}
+      return html`<div class="ev"><div class="ev-icon"><${Icon} name="cpu" size=${14} /></div><div class="ev-body">${label("", e.title || t("Hệ thống"))}
         <div class="small muted mono" style="white-space:pre-wrap">${e.body}</div></div></div>`;
   }
   return null;
@@ -117,7 +117,7 @@ function Ev({ e }) {
 function Thinking({ e }) {
   const [open, setOpen] = useState(false);
   return html`<div class="ev"><div class="ev-icon"><${Icon} name="brain" size=${14} /></div><div class="ev-body">
-    <div class="ev-label"><b>Suy nghĩ</b><span class="muted">${open ? "bấm để thu gọn" : "bấm để mở"}</span></div>
+    <div class="ev-label"><b>${t("Suy nghĩ")}</b><span class="muted">${open ? t("bấm để thu gọn") : t("bấm để mở")}</span></div>
     <div class=${"thinking" + (open ? " open" : "")} onClick=${() => setOpen(!open)}>${e.body}</div></div></div>`;
 }
 
@@ -177,9 +177,9 @@ export function RunView({ id, compact, onClose }) {
         <${AgentIcon} agent=${meta.kind === "agent" ? meta.agent : "script"} />
         <div class="grow"><div class="console-title">${meta.title || meta.id}</div>
           ${meta.project && html`<a class="small muted" href=${"#/p/" + encodeURIComponent(meta.project)}>${meta.project}</a>`}</div>
-        ${active(meta.status) && html`<${Btn} kind="danger" size="sm" icon="stop" onClick=${stop}>Dừng</${Btn}>`}
-        ${compact && html`<${Btn} kind="ghost" size="sm" icon="external" title="Mở toàn trang" onClick=${() => go("/runs/" + id)} />`}
-        ${onClose && html`<${Btn} kind="ghost" size="sm" icon="x" title="Đóng" onClick=${onClose} />`}
+        ${active(meta.status) && html`<${Btn} kind="danger" size="sm" icon="stop" onClick=${stop}>${t("Dừng")}</${Btn}>`}
+        ${compact && html`<${Btn} kind="ghost" size="sm" icon="external" title=${t("Mở toàn trang")} onClick=${() => go("/runs/" + id)} />`}
+        ${onClose && html`<${Btn} kind="ghost" size="sm" icon="x" title=${t("Đóng")} onClick=${onClose} />`}
       </div>
       <div class="console-stats">
         <${StatusPill} status=${meta.status} />
@@ -187,17 +187,17 @@ export function RunView({ id, compact, onClose }) {
         ${meta.pid ? html`<span>PID <b>${meta.pid}</b></span>` : null}
         ${u.model && html`<span>model <b>${u.model}</b></span>`}
         ${(u.inputTokens || u.outputTokens) ? html`<span>token <b>${(u.inputTokens || 0).toLocaleString()}</b> / <b>${(u.outputTokens || 0).toLocaleString()}</b></span>` : null}
-        ${u.costUsd ? html`<span>chi phí <b>$${u.costUsd.toFixed(3)}</b></span>` : null}
-        ${meta.exitCode != null && !active(meta.status) ? html`<span>mã thoát <b>${meta.exitCode}</b></span>` : null}
-        ${meta.prompt && html`<a style="cursor:pointer;color:var(--accent)" onClick=${() => setShowPrompt(!showPrompt)}>${showPrompt ? "ẩn prompt" : "xem prompt"}</a>`}
+        ${u.costUsd ? html`<span>${t("chi phí")} <b>$${u.costUsd.toFixed(3)}</b></span>` : null}
+        ${meta.exitCode != null && !active(meta.status) ? html`<span>${t("mã thoát")} <b>${meta.exitCode}</b></span>` : null}
+        ${meta.prompt && html`<a style="cursor:pointer;color:var(--accent)" onClick=${() => setShowPrompt(!showPrompt)}>${showPrompt ? t("ẩn prompt") : t("xem prompt")}</a>`}
       </div>
       <${ChainBar} group=${meta.group} current=${id} follow=${!!compact} />
       ${showPrompt && html`<pre class="block" style="max-height:220px">${meta.prompt}</pre>`}
     </div>
     <div class="timeline" ref=${box} onScroll=${(e) => { const el = e.currentTarget; stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 60; }}>
-      ${items.length === 0 && html`<div class="empty small">${meta.status === "queued" ? "Đang chờ tới lượt, máy chỉ chạy số việc nặng đã đặt trong Cài đặt." : "Đang khởi động…"}</div>`}
+      ${items.length === 0 && html`<div class="empty small">${meta.status === "queued" ? t("Đang chờ tới lượt, máy chỉ chạy số việc nặng đã đặt trong Cài đặt.") : t("Đang khởi động…")}</div>`}
       ${items.map((e) => html`<${Ev} key=${e.seq} e=${e} />`)}
-      ${active(meta.status) && items.length > 0 && html`<div class="status-line"><${Icon} name="loader" class="spin" size=${12} /> đang làm việc</div>`}
+      ${active(meta.status) && items.length > 0 && html`<div class="status-line"><${Icon} name="loader" class="spin" size=${12} /> ${t("đang làm việc")}</div>`}
     </div>
   </div>`;
 }

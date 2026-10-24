@@ -26,7 +26,7 @@ type SkillFile struct {
 	SHA     string `json:"sha"`
 }
 
-var errConflict = errors.New("file changed on disk since it was opened")
+var errConflict = trErr("file đã đổi trên đĩa từ lúc mở", "file changed on disk since it was opened")
 
 var editableExt = map[string]bool{".md": true, ".py": true, ".sh": true, ".txt": true, ".json": true, ".yaml": true, ".yml": true, ".js": true, ".toml": true}
 
@@ -84,7 +84,7 @@ func readSkillFile(root, rel string) (SkillFile, error) {
 		return SkillFile{}, err
 	}
 	if len(b) > maxEditable || !utf8.Valid(b) {
-		return SkillFile{}, errors.New("binary or very large file is not editable here")
+		return SkillFile{}, errors.New(tr("file nhị phân hoặc quá lớn, không sửa ở đây được", "binary or very large file is not editable here"))
 	}
 	return SkillFile{Path: rel, Content: string(b), SHA: hashOf(b)}, nil
 }
@@ -93,10 +93,10 @@ func readSkillFile(root, rel string) (SkillFile, error) {
 // An empty sha creates a new file and fails if one already exists.
 func writeSkillFile(root, rel, content, sha string) (SkillFile, error) {
 	if !editableExt[strings.ToLower(filepath.Ext(rel))] {
-		return SkillFile{}, errors.New("this file type is not editable")
+		return SkillFile{}, errors.New(tr("không sửa được loại file này", "this file type is not editable"))
 	}
 	if len(content) > maxEditable {
-		return SkillFile{}, errors.New("file too large")
+		return SkillFile{}, errors.New(tr("file quá lớn", "file too large"))
 	}
 	full, err := safeJoin(root, rel)
 	if err != nil {

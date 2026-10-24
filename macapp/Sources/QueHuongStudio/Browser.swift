@@ -6,6 +6,7 @@ import WebKit
 final class BrowserDelegate: NSObject, WKNavigationDelegate, WKUIDelegate, WKDownloadDelegate {
     weak var window: NSWindow?
     var onRetry: (() -> Void)?
+    var onStudioLoaded: (() -> Void)?
     private var downloads: [ObjectIdentifier: URL] = [:]
 
     private func isStudio(_ url: URL) -> Bool {
@@ -17,7 +18,7 @@ final class BrowserDelegate: NSObject, WKNavigationDelegate, WKUIDelegate, WKDow
     func showMessage(title: String, detail: String, retry: Bool = false) {
         guard let web = window?.contentView as? WKWebView else { return }
         let esc = { (s: String) in s.replacingOccurrences(of: "&", with: "&amp;").replacingOccurrences(of: "<", with: "&lt;") }
-        let button = retry ? #"<p><a href="qhs://retry">Thử lại</a></p>"# : #"<div class="spin"></div>"#
+        let button = retry ? "<p><a href=\"qhs://retry\">\(L("Thử lại", "Try again"))</a></p>" : #"<div class="spin"></div>"#
         web.loadHTMLString("""
         <!doctype html><meta charset="utf-8"><style>
         :root{color-scheme:light dark}body{margin:0;height:100vh;display:grid;place-items:center;font:15px -apple-system,sans-serif;background:#0f1117;color:#e6e8ef}
@@ -69,10 +70,14 @@ final class BrowserDelegate: NSObject, WKNavigationDelegate, WKUIDelegate, WKDow
 
     func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
         if (error as NSError).code == NSURLErrorCancelled { return }
-        showMessage(title: "Không mở được studio", detail: error.localizedDescription, retry: true)
+        showMessage(title: L("Không mở được studio", "Could not open the studio"), detail: error.localizedDescription, retry: true)
     }
 
     func webViewWebContentProcessDidTerminate(_ webView: WKWebView) { webView.reload() }
+
+    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        if let url = webView.url, isStudio(url) { onStudioLoaded?() }
+    }
 
     /// window.open and target=_blank: studio pages stay here, everything else opens in the browser.
     func webView(_ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration,
@@ -107,7 +112,7 @@ final class BrowserDelegate: NSObject, WKNavigationDelegate, WKUIDelegate, WKDow
 
     func download(_ download: WKDownload, didFailWithError error: Error, resumeData: Data?) {
         downloads.removeValue(forKey: ObjectIdentifier(download))
-        alert("Tải xuống lỗi", error.localizedDescription)
+        alert(L("Tải xuống lỗi", "Download failed"), error.localizedDescription)
     }
 
     // MARK: JavaScript dialogs and file pickers
@@ -132,8 +137,8 @@ final class BrowserDelegate: NSObject, WKNavigationDelegate, WKUIDelegate, WKDow
                  initiatedByFrame frame: WKFrameInfo, completionHandler: @escaping (Bool) -> Void) {
         let a = NSAlert()
         a.messageText = message
-        a.addButton(withTitle: "Đồng ý")
-        a.addButton(withTitle: "Huỷ")
+        a.addButton(withTitle: L("Đồng ý", "OK"))
+        a.addButton(withTitle: L("Huỷ", "Cancel"))
         completionHandler(a.runModal() == .alertFirstButtonReturn)
     }
 
@@ -144,8 +149,8 @@ final class BrowserDelegate: NSObject, WKNavigationDelegate, WKUIDelegate, WKDow
         let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 320, height: 24))
         field.stringValue = defaultText ?? ""
         a.accessoryView = field
-        a.addButton(withTitle: "Đồng ý")
-        a.addButton(withTitle: "Huỷ")
+        a.addButton(withTitle: L("Đồng ý", "OK"))
+        a.addButton(withTitle: L("Huỷ", "Cancel"))
         completionHandler(a.runModal() == .alertFirstButtonReturn ? field.stringValue : nil)
     }
 

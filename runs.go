@@ -136,7 +136,7 @@ func (m *Manager) loadHistory() {
 				resetForRetry(&meta) // scripts are idempotent: run again
 			} else {
 				if orphan {
-					meta.Error = fmt.Sprintf("tiến trình cũ (PID %d) vẫn còn chạy; dừng nó rồi chạy lại", meta.PID)
+					meta.Error = fmt.Sprintf(tr("tiến trình cũ (PID %d) vẫn còn chạy; dừng nó rồi chạy lại", "the old process (PID %d) is still running; stop it, then run again"), meta.PID)
 				}
 				meta.Status = "interrupted"
 				if meta.Ended.IsZero() {
@@ -195,13 +195,13 @@ func (m *Manager) SubmitChain(specs []RunSpec, deps [][]int) ([]RunMeta, error) 
 			return nil, errors.New("missing working directory")
 		}
 		if st, err := os.Stat(spec.Cwd); err != nil || !st.IsDir() {
-			return nil, fmt.Errorf("working directory not found: %s", spec.Cwd)
+			return nil, fmt.Errorf(tr("không thấy thư mục làm việc: %s", "working directory not found: %s"), spec.Cwd)
 		}
 	}
 	m.mu.Lock()
 	if m.closed {
 		m.mu.Unlock()
-		return nil, errors.New("studio is shutting down")
+		return nil, errors.New(tr("studio đang tắt", "the studio is shutting down"))
 	}
 	group := ""
 	if len(specs) > 1 {
@@ -227,9 +227,9 @@ func (m *Manager) SubmitChain(specs []RunSpec, deps [][]int) ([]RunMeta, error) 
 			return nil, err
 		}
 		r.persist(m.dir)
-		title := "Đang chờ tới lượt"
+		title := tr("Đang chờ tới lượt", "Waiting for a free slot")
 		if len(r.meta.After) > 0 {
-			title = "Chờ bước trước xong"
+			title = tr("Chờ bước trước xong", "Waiting for the previous step")
 		}
 		r.emit(m.dir, Event{Kind: "status", Title: title})
 		m.runs[r.meta.ID] = r
@@ -322,11 +322,11 @@ func (m *Manager) startNext() bool {
 		}
 		if blockedBy != "" {
 			r.meta.Status = "failed"
-			r.meta.Error = "bước trước không hoàn thành: " + blockedBy
+			r.meta.Error = tr("bước trước không hoàn thành: ", "a previous step did not finish: ") + blockedBy
 			r.meta.Ended = time.Now()
 			r.mu.Unlock()
 			m.mu.Unlock()
-			r.emit(m.dir, Event{Kind: "status", Title: "Bỏ qua vì bước trước không hoàn thành", Error: true})
+			r.emit(m.dir, Event{Kind: "status", Title: tr("Bỏ qua vì bước trước không hoàn thành", "Skipped because a previous step did not finish"), Error: true})
 			r.persist(m.dir)
 			m.closeRun(r)
 			return true
@@ -423,7 +423,7 @@ func (m *Manager) execute(r *run) {
 		m.terminate(r, cmd.Process.Pid)
 	}
 	r.persist(m.dir)
-	r.emit(m.dir, Event{Kind: "status", Title: "Đang chạy", Body: fmt.Sprintf("PID %d · %s", cmd.Process.Pid, shortCmd(spec.Argv))})
+	r.emit(m.dir, Event{Kind: "status", Title: tr("Đang chạy", "Running"), Body: fmt.Sprintf("PID %d · %s", cmd.Process.Pid, shortCmd(spec.Argv))})
 	limit := runTimeout(spec)
 	timer := time.AfterFunc(limit, func() {
 		r.mu.Lock()
@@ -433,7 +433,7 @@ func (m *Manager) execute(r *run) {
 		}
 		r.timedOut, r.stopped = true, true
 		r.mu.Unlock()
-		r.emit(m.dir, Event{Kind: "status", Title: "Quá giới hạn thời gian, đang dừng", Body: limit.String(), Error: true})
+		r.emit(m.dir, Event{Kind: "status", Title: tr("Quá giới hạn thời gian, đang dừng", "Time limit exceeded, stopping"), Body: limit.String(), Error: true})
 		m.terminate(r, cmd.Process.Pid)
 	})
 	defer timer.Stop()
@@ -456,7 +456,7 @@ func (m *Manager) execute(r *run) {
 			r.mu.Unlock()
 		}
 		if err := sc.Err(); err != nil {
-			r.emit(m.dir, Event{Kind: "error", Body: "đầu ra không đọc được tiếp: " + err.Error(), Error: true})
+			r.emit(m.dir, Event{Kind: "error", Body: tr("đầu ra không đọc được tiếp: ", "could not keep reading the output: ") + err.Error(), Error: true})
 		}
 		_, _ = io.Copy(io.Discard, outR) // keep the child unblocked after a scanner error
 	}()
@@ -525,7 +525,7 @@ func (m *Manager) finish(r *run, code int, err error) {
 		r.meta.Status = "interrupted"
 	case r.timedOut && code != 0:
 		r.meta.Status = "failed"
-		r.meta.Error = fmt.Sprintf("quá giới hạn %s", runTimeout(r.meta.RunSpec))
+		r.meta.Error = fmt.Sprintf(tr("quá giới hạn %s", "exceeded the %s limit"), runTimeout(r.meta.RunSpec))
 	case r.stopped:
 		r.meta.Status = "stopped"
 	case err != nil:
@@ -542,7 +542,7 @@ func (m *Manager) finish(r *run, code int, err error) {
 	}
 	status, elapsed := r.meta.Status, r.meta.Ended.Sub(r.meta.Started).Round(100*time.Millisecond)
 	r.mu.Unlock()
-	body := fmt.Sprintf("mã thoát %d · %s", code, elapsed)
+	body := fmt.Sprintf(tr("mã thoát %d · %s", "exit code %d · %s"), code, elapsed)
 	if err != nil {
 		body = err.Error()
 	}
@@ -561,7 +561,21 @@ func (m *Manager) finish(r *run, code int, err error) {
 }
 
 func statusLabel(s string) string {
-	return map[string]string{"succeeded": "Hoàn thành", "failed": "Thất bại", "stopped": "Đã dừng", "interrupted": "Bị gián đoạn", "running": "Đang chạy", "queued": "Đang chờ"}[s]
+	switch s {
+	case "succeeded":
+		return tr("Hoàn thành", "Succeeded")
+	case "failed":
+		return tr("Thất bại", "Failed")
+	case "stopped":
+		return tr("Đã dừng", "Stopped")
+	case "interrupted":
+		return tr("Bị gián đoạn", "Interrupted")
+	case "running":
+		return tr("Đang chạy", "Running")
+	case "queued":
+		return tr("Đang chờ", "Queued")
+	}
+	return ""
 }
 
 func (r *run) emit(dir string, e Event) {
@@ -686,7 +700,7 @@ func (m *Manager) Subscribe(r *run, after int) ([]Event, chan Event, func()) {
 func (m *Manager) Stop(id string) error {
 	r, ok := m.Get(id)
 	if !ok {
-		return errors.New("run not found")
+		return errors.New(tr("không tìm thấy lượt chạy", "run not found"))
 	}
 	r.mu.Lock()
 	if !r.meta.active() {
@@ -702,7 +716,7 @@ func (m *Manager) Stop(id string) error {
 	}
 	r.mu.Unlock()
 	if queued {
-		r.emit(m.dir, Event{Kind: "status", Title: "Đã huỷ trước khi chạy"})
+		r.emit(m.dir, Event{Kind: "status", Title: tr("Đã huỷ trước khi chạy", "Cancelled before it ran")})
 		r.persist(m.dir)
 		m.closeRun(r)
 		m.poke() // runs waiting on this one now fail instead of waiting forever

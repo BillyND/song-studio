@@ -60,7 +60,7 @@ func main() {
 
 	// One studio per port: a second launch just brings the running one to the front.
 	if alreadyRunning(listen) {
-		fmt.Println("Song Studio đang chạy:", url)
+		fmt.Println(tr("Song Studio đang chạy:", "Song Studio is already running:"), url)
 		if !*noOpen {
 			_ = exec.Command("open", url).Run()
 		}
@@ -100,7 +100,7 @@ func main() {
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
 	<-sig
-	fmt.Println("\nĐang dừng các lượt chạy…")
+	fmt.Println(tr("\nĐang dừng các lượt chạy…", "\nStopping runs…"))
 	runs.Shutdown(8 * time.Second)
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()

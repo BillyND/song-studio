@@ -101,10 +101,10 @@ export const go = (path) => { location.hash = path; };
 export function ago(iso) {
   if (!iso || iso.startsWith("0001")) return "";
   const s = (Date.now() - new Date(iso).getTime()) / 1000;
-  if (s < 45) return "vừa xong";
-  if (s < 3600) return `${Math.round(s / 60)} phút trước`;
-  if (s < 86400) return `${Math.round(s / 3600)} giờ trước`;
-  return `${Math.round(s / 86400)} ngày trước`;
+  if (s < 45) return t("vừa xong");
+  if (s < 3600) return t("{n} phút trước", { n: Math.round(s / 60) });
+  if (s < 86400) return t("{n} giờ trước", { n: Math.round(s / 3600) });
+  return t("{n} ngày trước", { n: Math.round(s / 86400) });
 }
 export function dur(ms) {
   if (ms < 0 || !isFinite(ms)) return "";
@@ -133,8 +133,8 @@ export function bytes(n) {
 export const media = (slug, rel, bust) => `/media/${encodeURIComponent(slug)}/${rel.split("/").map(encodeURIComponent).join("/")}${bust ? `?v=${bust}` : ""}`;
 
 export async function copyText(text) {
-  try { await navigator.clipboard.writeText(text); toast("Đã chép vào clipboard"); }
-  catch { toast("Không chép được, hãy chọn và chép tay", "bad"); }
+  try { await navigator.clipboard.writeText(text); toast(t("Đã chép vào clipboard")); }
+  catch { toast(t("Không chép được, hãy chọn và chép tay"), "bad"); }
 }
 
 export const theme = {

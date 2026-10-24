@@ -140,7 +140,7 @@ func fail(w http.ResponseWriter, code int, err error) {
 func failFor(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, os.ErrNotExist):
-		fail(w, http.StatusNotFound, errors.New("không tìm thấy"))
+		fail(w, http.StatusNotFound, errors.New(tr("không tìm thấy", "not found")))
 	case errors.Is(err, errOutside):
 		fail(w, http.StatusForbidden, err)
 	case errors.Is(err, errConflict):
@@ -180,8 +180,8 @@ func (a *App) health(w http.ResponseWriter, r *http.Request) {
 func (a *App) bootstrap(w http.ResponseWriter, r *http.Request) {
 	cfg := a.cfg.Get()
 	writeJSON(w, 200, map[string]any{
-		"version": a.version, "config": cfg, "agents": agentInfos(cfg), "actions": workflowActions, "profiles": skillProfiles(cfg.SkillDir),
-		"skillExists": exists(filepath.Join(cfg.SkillDir, "SKILL.md")), "genres": genres, "languages": languages,
+		"version": a.version, "config": cfg, "agents": agentInfos(cfg), "actions": workflowActions(), "profiles": skillProfiles(cfg.SkillDir),
+		"skillExists": exists(filepath.Join(cfg.SkillDir, "SKILL.md")), "genres": genreList(), "languages": languageList(),
 	})
 }
 
@@ -404,7 +404,7 @@ func (a *App) removeRef(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, d)
 }
 
-var errBusy = errors.New("bài đang có việc chạy, hãy dừng hoặc chờ xong rồi xoá")
+var errBusy = trErr("bài đang có việc chạy, hãy dừng hoặc chờ xong rồi xoá", "the song has a run in progress; stop it or wait for it to finish before deleting")
 
 // deleteProject and deleteVideo move files to the Trash rather than erasing them.
 func (a *App) deleteProject(w http.ResponseWriter, r *http.Request) {
@@ -518,9 +518,6 @@ func (a *App) projectAction(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		spec.Cwd = d.Dir
-		if action == "ref.save.agent" {
-			spec.Cwd = cfg.SkillDir
-		}
 		argv, err := agentArgv(cfg, agent, req.Model, prompt, spec.Cwd)
 		if err != nil {
 			failFor(w, err)
@@ -569,7 +566,7 @@ func (a *App) projectPipeline(w http.ResponseWriter, r *http.Request) {
 	active := a.runs.ActiveFor(slug)
 	for _, s := range specs {
 		if id, busy := active[s.Step]; busy {
-			fail(w, http.StatusConflict, fmt.Errorf("bài này đang có việc chạy ở bước %q (%s); đợi xong hoặc dừng nó trước", s.Step, id))
+			fail(w, http.StatusConflict, fmt.Errorf(tr("bài này đang có việc chạy ở bước %q (%s); đợi xong hoặc dừng nó trước", "this song already has a run in step %q (%s); wait for it or stop it first"), s.Step, id))
 			return
 		}
 	}
@@ -686,7 +683,7 @@ func (a *App) createRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if strings.TrimSpace(req.Prompt) == "" {
-		fail(w, 400, errors.New("cần nội dung yêu cầu"))
+		fail(w, 400, errors.New(tr("cần nội dung yêu cầu", "the request text is required")))
 		return
 	}
 	cfg := a.cfg.Get()
@@ -697,9 +694,10 @@ func (a *App) createRun(w http.ResponseWriter, r *http.Request) {
 	switch req.Target {
 	case "skill":
 		spec.Cwd, spec.Step = cfg.SkillDir, "skill"
-		spec.Prompt = fmt.Sprintf(skillPromptHeader, cfg.SkillDir) + strings.TrimSpace(req.Prompt)
+		spec.Prompt = fmt.Sprintf(skillPromptHeader, cfg.SkillDir) + strings.TrimSpace(req.Prompt) +
+			tr("", "\n\nThe studio is in English: write your final reply in English; keep the skill files in their current language.")
 		if spec.Title == "" {
-			spec.Title = "Sửa skill: " + firstLine(req.Prompt, 60)
+			spec.Title = tr("Sửa skill: ", "Edit skill: ") + firstLine(req.Prompt, 60)
 		}
 	case "project":
 		dir, err := a.projects.dir(req.Project)
@@ -708,12 +706,12 @@ func (a *App) createRun(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		spec.Cwd, spec.Project = dir, req.Project
-		spec.Prompt = fmt.Sprintf(promptHeader, cfg.SkillDir, dir) + "\nViệc: " + strings.TrimSpace(req.Prompt)
+		spec.Prompt = projectPromptHeader(cfg.SkillDir, dir) + "\nViệc: " + strings.TrimSpace(req.Prompt)
 		if spec.Title == "" {
 			spec.Title = firstLine(req.Prompt, 60)
 		}
 	default:
-		fail(w, 400, errors.New("target must be skill or project"))
+		fail(w, 400, errors.New(tr("đích phải là skill hoặc project", "target must be skill or project")))
 		return
 	}
 	argv, err := agentArgv(cfg, spec.Agent, spec.Model, spec.Prompt, spec.Cwd)
@@ -870,7 +868,7 @@ if [ -d "$1" ]; then
 else
   echo "ak-skill-creator not installed: structural checks skipped"
 fi`
-	meta, err := a.runs.Submit(RunSpec{Kind: "script", Step: "skill", Title: "Kiểm tra skill", Cwd: cfg.SkillDir,
+	meta, err := a.runs.Submit(RunSpec{Kind: "script", Step: "skill", Title: tr("Kiểm tra skill", "Check skill"), Cwd: cfg.SkillDir,
 		Argv: []string{"/bin/bash", "-c", script, "validate", creator, cfg.SkillDir}})
 	if err != nil {
 		failFor(w, err)
@@ -891,7 +889,7 @@ func (a *App) secretEnv(names []string) []string {
 func secretName(r *http.Request) (string, error) {
 	name := r.PathValue("name")
 	if !slices.Contains(secretNames, name) {
-		return "", errors.New("tên khoá không hợp lệ")
+		return "", errors.New(tr("tên khoá không hợp lệ", "invalid key name"))
 	}
 	return name, nil
 }
@@ -915,7 +913,7 @@ func (a *App) putSecret(w http.ResponseWriter, r *http.Request) {
 	}
 	v := strings.TrimSpace(req.Value)
 	if !plausibleKey(v) {
-		failFor(w, errors.New("khoá trông không đúng: dán đúng một dòng khoá"))
+		failFor(w, errors.New(tr("khoá trông không đúng: dán đúng một dòng khoá", "the key looks wrong: paste exactly one line with the key")))
 		return
 	}
 	if err := a.secrets.Set(name, v); err != nil {
@@ -961,7 +959,7 @@ func (a *App) importLegacySecret(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !plausibleKey(v) {
-		failFor(w, errors.New("khoá trong file cũ không hợp lệ"))
+		failFor(w, errors.New(tr("khoá trong file cũ không hợp lệ", "the key in the old file is invalid")))
 		return
 	}
 	if err := a.secrets.Set("image.hub", v); err != nil {
@@ -979,7 +977,7 @@ func (a *App) patchMeta(w http.ResponseWriter, r *http.Request) {
 	}
 	slug := r.PathValue("slug")
 	if a.runs.Busy(slug) { // trim-intro and the scene agent rewrite project.json too
-		fail(w, http.StatusConflict, errors.New("bài đang có việc chạy; đổi thể loại hoặc kiểu video sau khi xong"))
+		fail(w, http.StatusConflict, errors.New(tr("bài đang có việc chạy; đổi thể loại hoặc kiểu video sau khi xong", "the song has a run in progress; change the genre or video style after it finishes")))
 		return
 	}
 	if err := a.projects.SetMeta(slug, m); err != nil {

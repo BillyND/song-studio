@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os/exec"
 	"strings"
@@ -46,7 +47,7 @@ func agentArgv(cfg Config, agent, model, prompt, cwd string) ([]string, error) {
 		return append(argv, prompt), nil
 	case "omp":
 		if !full {
-			return nil, fmt.Errorf("omp không có chế độ chỉ sửa file; chọn claude/codex hoặc bật Toàn quyền trong Cài đặt")
+			return nil, errors.New(tr("omp không có chế độ chỉ sửa file; chọn claude/codex hoặc bật Toàn quyền trong Cài đặt", "omp has no edit-only mode; pick claude/codex or turn on Full access in Settings"))
 		}
 		argv := []string{a.Bin, "-p", "--mode", "json", "--cwd", cwd}
 		if model != "" {

@@ -48,31 +48,32 @@ func (a *App) doctor() []Check {
 			if required {
 				status = "bad"
 			}
-			add(Check{ID: id, Label: label, Status: status, Detail: "không thấy", Fix: fix})
+			add(Check{ID: id, Label: label, Status: status, Detail: tr("không thấy", "not found"), Fix: fix})
 			return
 		}
 		add(Check{ID: id, Label: label, Status: "ok", Detail: toolVersion(path, versionArg)})
 	}
-	tool("ffmpeg", "ffmpeg (xử lý âm thanh, xuất video)", "ffmpeg", "-version", "brew install ffmpeg", true)
+	tool("ffmpeg", tr("ffmpeg (xử lý âm thanh, xuất video)", "ffmpeg (audio processing, video export)"), "ffmpeg", "-version", "brew install ffmpeg", true)
 	tool("ffprobe", "ffprobe", "ffprobe", "-version", "brew install ffmpeg", true)
-	tool("uv", "uv (cài môi trường Python)", "uv", "--version", "brew install uv", true)
-	tool("mscore", "MuseScore 4 (PDF bản nhạc)", "mscore", "", "brew install --cask musescore", false)
+	tool("uv", tr("uv (cài môi trường Python)", "uv (Python environment setup)"), "uv", "--version", "brew install uv", true)
+	tool("mscore", tr("MuseScore 4 (PDF bản nhạc)", "MuseScore 4 (sheet music PDF)"), "mscore", "", "brew install --cask musescore", false)
 
 	if exists(filepath.Join(cfg.SkillDir, "SKILL.md")) {
 		add(Check{ID: "skill", Label: "Skill suno-que-huong", Status: "ok", Detail: cfg.SkillDir})
 	} else {
-		add(Check{ID: "skill", Label: "Skill suno-que-huong", Status: "bad", Detail: "không thấy SKILL.md ở " + cfg.SkillDir, Fix: "Sửa thư mục Skill ở Cài đặt"})
+		add(Check{ID: "skill", Label: "Skill suno-que-huong", Status: "bad", Detail: tr("không thấy SKILL.md ở ", "SKILL.md not found in ") + cfg.SkillDir, Fix: tr("Sửa thư mục Skill ở Cài đặt", "Fix the Skill folder in Settings")})
 	}
 
 	venv := filepath.Join(a.home, ".local", "share", "suno-que-huong", "venv")
 	stamp, _ := os.ReadFile(filepath.Join(venv, ".requirements.sha256"))
+	venvLabel := tr("Môi trường Python", "Python environment")
 	switch want := fileSHA(filepath.Join(cfg.SkillDir, "scripts", "requirements-video.lock")); {
 	case !exists(filepath.Join(venv, "bin", "python")):
-		add(Check{ID: "venv", Label: "Môi trường Python", Status: "warn", Detail: "chưa cài", Fix: "Tự cài ở lần canh lời đầu tiên (tải PyTorch, vài phút)"})
+		add(Check{ID: "venv", Label: venvLabel, Status: "warn", Detail: tr("chưa cài", "not installed"), Fix: tr("Tự cài ở lần canh lời đầu tiên (tải PyTorch, vài phút)", "Installs itself on the first alignment (downloads PyTorch, a few minutes)")})
 	case want != "" && strings.TrimSpace(string(stamp)) != want:
-		add(Check{ID: "venv", Label: "Môi trường Python", Status: "warn", Detail: "khác bản khoá trong skill", Fix: "Tự cập nhật ở lần chạy script tiếp theo"})
+		add(Check{ID: "venv", Label: venvLabel, Status: "warn", Detail: tr("khác bản khoá trong skill", "differs from the skill's lock file"), Fix: tr("Tự cập nhật ở lần chạy script tiếp theo", "Updates itself on the next script run")})
 	default:
-		add(Check{ID: "venv", Label: "Môi trường Python", Status: "ok", Detail: venv})
+		add(Check{ID: "venv", Label: venvLabel, Status: "ok", Detail: venv})
 	}
 
 	cache := filepath.Join(a.home, ".cache")
@@ -86,10 +87,11 @@ func (a *App) doctor() []Check {
 	if len(hf)+len(th) > 0 {
 		models = append(models, "Demucs")
 	}
+	modelsLabel := tr("Model tách giọng và canh lời", "Vocal separation and alignment models")
 	if len(models) == 2 {
-		add(Check{ID: "models", Label: "Model tách giọng và canh lời", Status: "ok", Detail: strings.Join(models, ", ")})
+		add(Check{ID: "models", Label: modelsLabel, Status: "ok", Detail: strings.Join(models, ", ")})
 	} else {
-		add(Check{ID: "models", Label: "Model tách giọng và canh lời", Status: "warn", Detail: "chưa tải đủ", Fix: "Tự tải ở lần canh lời đầu tiên (khoảng 200 MB)"})
+		add(Check{ID: "models", Label: modelsLabel, Status: "warn", Detail: tr("chưa tải đủ", "not fully downloaded"), Fix: tr("Tự tải ở lần canh lời đầu tiên (khoảng 200 MB)", "Downloads itself on the first alignment (about 200 MB)")})
 	}
 
 	avail := 0
@@ -99,32 +101,42 @@ func (a *App) doctor() []Check {
 		}
 	}
 	if avail > 0 {
-		add(Check{ID: "agents", Label: "Agent (claude, omp, codex)", Status: "ok", Detail: fmt.Sprintf("%d agent dùng được", avail)})
+		add(Check{ID: "agents", Label: "Agent (claude, omp, codex)", Status: "ok", Detail: fmt.Sprintf(tr("%d agent dùng được", "%d agents available"), avail)})
 	} else {
-		add(Check{ID: "agents", Label: "Agent (claude, omp, codex)", Status: "bad", Detail: "không thấy agent nào", Fix: "Cài Claude Code hoặc Codex, rồi sửa đường dẫn ở Cài đặt"})
+		add(Check{ID: "agents", Label: "Agent (claude, omp, codex)", Status: "bad", Detail: tr("không thấy agent nào", "no agent found"), Fix: tr("Cài Claude Code hoặc Codex, rồi sửa đường dẫn ở Cài đặt", "Install Claude Code or Codex, then fix the path in Settings")})
 	}
 
 	var st syscall.Statfs_t
 	if err := syscall.Statfs(existingParent(cfg.ProjectsDir), &st); err == nil {
 		free := int64(st.Bavail) * int64(st.Bsize)
-		c := Check{ID: "disk", Label: "Ổ đĩa còn trống", Status: "ok", Detail: fmt.Sprintf("%.1f GB", float64(free)/(1<<30))}
+		c := Check{ID: "disk", Label: tr("Ổ đĩa còn trống", "Free disk space"), Status: "ok", Detail: fmt.Sprintf("%.1f GB", float64(free)/(1<<30))}
 		if free < minFreeBytes {
-			c.Status, c.Fix = "warn", "Dọn bớt ổ đĩa hoặc Thùng rác; mỗi bài cần vài GB khi đang làm"
+			c.Status, c.Fix = "warn", tr("Dọn bớt ổ đĩa hoặc Thùng rác; mỗi bài cần vài GB khi đang làm", "Free up disk space or empty the Trash; each song needs a few GB while in progress")
 		}
 		add(c)
 	}
 
 	provider := cfg.Image.Provider
+	name := providerName(provider)
 	key, _ := a.secrets.Get("image." + provider)
+	keyLabel := tr("Khoá tạo ảnh", "Image API key")
 	switch {
 	case key != "":
-		add(Check{ID: "imagekey", Label: "Khoá tạo ảnh", Status: "ok", Detail: provider + " (Keychain)"})
+		add(Check{ID: "imagekey", Label: keyLabel, Status: "ok", Detail: name + " (Keychain)"})
 	case provider == "hub" && readLegacyHubKey(a.home) != "":
-		add(Check{ID: "imagekey", Label: "Khoá tạo ảnh", Status: "ok", Detail: "hub (file cũ aihub.key)", Fix: "Nên chuyển vào Keychain ở Cài đặt → Tạo ảnh"})
+		add(Check{ID: "imagekey", Label: keyLabel, Status: "ok", Detail: name + tr(" (file cũ aihub.key)", " (old aihub.key file)"), Fix: tr("Nên chuyển vào Keychain ở Cài đặt → Tạo ảnh", "Move it into the Keychain in Settings → Images")})
 	default:
-		add(Check{ID: "imagekey", Label: "Khoá tạo ảnh", Status: "bad", Detail: "chưa có khoá cho " + provider, Fix: "Dán khoá ở Cài đặt → Tạo ảnh"})
+		add(Check{ID: "imagekey", Label: keyLabel, Status: "bad", Detail: tr("chưa có khoá cho ", "no key for ") + name, Fix: tr("Dán khoá ở Cài đặt → Tạo ảnh", "Paste a key in Settings → Images")})
 	}
 	return out
+}
+
+// providerName is how the UI names an image provider; the "hub" id is any OpenAI-compatible endpoint.
+func providerName(id string) string {
+	if id == "hub" {
+		return "OpenAI-compatible"
+	}
+	return id
 }
 
 // toolVersion is the first line of `<bin> <arg>`, or the path when there is no arg or no output.
@@ -175,11 +187,12 @@ func (a *App) redactor() func(string) string {
 	if v := readLegacyHubKey(a.home); len(v) >= 8 {
 		keys = append(keys, v)
 	}
+	mask := tr("[đã che]", "[redacted]")
 	return func(s string) string {
 		for _, k := range keys {
-			s = strings.ReplaceAll(s, k, "[đã che]")
+			s = strings.ReplaceAll(s, k, mask)
 		}
-		return keyPatterns.ReplaceAllString(s, "[đã che]")
+		return keyPatterns.ReplaceAllString(s, mask)
 	}
 }
 

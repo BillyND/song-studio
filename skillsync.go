@@ -77,7 +77,7 @@ type skillState struct {
 func syncBundledSkill(bundle, target, stateFile, backups string) (string, error) {
 	want, err := skillHash(bundle)
 	if err != nil {
-		return "", fmt.Errorf("skill trong app hỏng: %w", err)
+		return "", fmt.Errorf(tr("skill trong app hỏng: %w", "the skill inside the app is damaged: %w"), err)
 	}
 	var st skillState
 	if b, err := os.ReadFile(stateFile); err == nil {
@@ -93,7 +93,7 @@ func syncBundledSkill(bundle, target, stateFile, backups string) (string, error)
 		if err := replaceDir(bundle, target); err != nil {
 			return "", err
 		}
-		return "đã cài skill", record()
+		return tr("đã cài skill", "skill installed"), record()
 	}
 	have, err := skillHash(target)
 	if err != nil {
@@ -101,17 +101,17 @@ func syncBundledSkill(bundle, target, stateFile, backups string) (string, error)
 	}
 	switch {
 	case have == want:
-		return "skill đã mới nhất", record()
+		return tr("skill đã mới nhất", "skill is up to date"), record()
 	case st.Installed == want:
-		return "giữ các sửa đổi skill trên máy", nil // this snapshot was installed before; the user edited since
+		return tr("giữ các sửa đổi skill trên máy", "keeping the local skill edits"), nil // this snapshot was installed before; the user edited since
 	}
-	note := "đã cập nhật skill"
+	note := tr("đã cập nhật skill", "skill updated")
 	if have != st.Installed { // edited locally (or installed by hand): keep a copy
 		dst := filepath.Join(backups, time.Now().Format("060102-150405"))
 		if err := copyDir(target, dst); err != nil {
-			return "", fmt.Errorf("không sao lưu được skill: %w", err)
+			return "", fmt.Errorf(tr("không sao lưu được skill: %w", "could not back up the skill: %w"), err)
 		}
-		note += ", bản cũ sao lưu ở " + dst
+		note += tr(", bản cũ sao lưu ở ", ", old copy backed up in ") + dst
 	}
 	if err := replaceDir(bundle, target); err != nil {
 		return "", err

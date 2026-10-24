@@ -38,25 +38,28 @@ type Action struct {
 	Secrets []string `json:"-"`
 }
 
-var workflowActions = []Action{
-	{ID: "ref.analyze", Step: "lyrics", Label: "Phân tích bài mẫu", Kind: "script", Heavy: true, Hint: "Đo tempo, giọng, hợp âm, bộ gõ, bass, cấu trúc"},
-	{ID: "lyrics.agent", Step: "suno", Label: "Soát lời & chia đoạn", Kind: "agent", Hint: "Sửa tên, dấu, dấu câu; chia Verse/Chorus"},
-	{ID: "style.agent", Step: "suno", Label: "Phối khí & viết Styles", Kind: "agent", Hint: "Từ bài mẫu, yêu cầu và kiểu phối, viết Styles và thẻ đoạn"},
-	{ID: "suno.agent", Step: "suno", Label: "Agent điền form Suno", Kind: "agent", Hint: "Dùng CUA mở suno.com/create, không bấm Create"},
-	{ID: "ref.save.agent", Step: "suno", Label: "Lưu kiểu phối vào skill", Kind: "agent", Hint: "Thêm thành profile dùng lại trong references/style-profiles.md"},
-	{ID: "align", Step: "align", Label: "Canh lời", Kind: "script", Heavy: true, Hint: "Tách giọng + Whisper, khoảng 3 phút"},
-	{ID: "trim", Step: "trim", Label: "Cắt intro", Kind: "script", Heavy: true, Hint: "Bỏ các câu nhạc dạo cho giọng vào ~11s"},
-	{ID: "scenes.agent", Step: "scenes", Label: "Agent lên danh sách cảnh", Kind: "agent", Hint: "Viết scenes vào project.json theo lời"},
-	{ID: "images", Step: "scenes", Label: "Tạo ảnh còn thiếu", Kind: "script", Hint: "4 ảnh song song, nguồn chọn ở Cài đặt", Secrets: []string{"image"}},
-	{ID: "stills", Step: "stills", Label: "Render khung hình xem trước", Kind: "script", Heavy: true, Hint: "Tựa đề, đếm ngược, giữa câu, đoạn kết"},
-	{ID: "render", Step: "render", Label: "Xuất video", Kind: "script", Heavy: true, Hint: "MP4 1080p, khoảng 8–9 phút"},
-	{ID: "sheet", Step: "sheet", Label: "Chép bản nhạc", Kind: "script", Heavy: true, Hint: "Giai điệu và lời từ giọng hát, ra PDF; khoảng 30 giây"},
+// workflowActions lists the step actions with labels and hints in the studio language.
+func workflowActions() []Action {
+	return []Action{
+		{ID: "ref.analyze", Step: "lyrics", Label: tr("Phân tích bài mẫu", "Analyze references"), Kind: "script", Heavy: true, Hint: tr("Đo tempo, giọng, hợp âm, bộ gõ, bass, cấu trúc", "Measures tempo, key, chords, percussion, bass, structure")},
+		{ID: "lyrics.agent", Step: "suno", Label: tr("Soát lời & chia đoạn", "Review lyrics & sections"), Kind: "agent", Hint: tr("Sửa tên, dấu, dấu câu; chia Verse/Chorus", "Fixes names, diacritics, punctuation; splits Verse/Chorus")},
+		{ID: "style.agent", Step: "suno", Label: tr("Phối khí & viết Styles", "Arrange & write Styles"), Kind: "agent", Hint: tr("Từ bài mẫu, yêu cầu và kiểu phối, viết Styles và thẻ đoạn", "Writes Styles and section tags from the references, brief and arrangement")},
+		{ID: "suno.agent", Step: "suno", Label: tr("Agent điền form Suno", "Agent fills the Suno form"), Kind: "agent", Hint: tr("Dùng CUA mở suno.com/create, không bấm Create", "Opens suno.com/create with CUA, never clicks Create")},
+		{ID: "align", Step: "align", Label: tr("Canh lời", "Align lyrics"), Kind: "script", Heavy: true, Hint: tr("Tách giọng + Whisper, khoảng 3 phút", "Vocal separation + Whisper, about 3 minutes")},
+		{ID: "trim", Step: "trim", Label: tr("Cắt intro", "Trim intro"), Kind: "script", Heavy: true, Hint: tr("Bỏ các câu nhạc dạo cho giọng vào ~11s", "Drops intro phrases so the vocal starts at ~11s")},
+		{ID: "scenes.agent", Step: "scenes", Label: tr("Agent lên danh sách cảnh", "Agent plans the scenes"), Kind: "agent", Hint: tr("Viết scenes vào project.json theo lời", "Writes scenes into project.json from the lyrics")},
+		{ID: "images", Step: "scenes", Label: tr("Tạo ảnh còn thiếu", "Generate missing images"), Kind: "script", Hint: tr("4 ảnh song song, nguồn chọn ở Cài đặt", "4 images at once, provider set in Settings"), Secrets: []string{"image"}},
+		{ID: "stills", Step: "stills", Label: tr("Render khung hình xem trước", "Render preview frames"), Kind: "script", Heavy: true, Hint: tr("Tựa đề, đếm ngược, giữa câu, đoạn kết", "Title, countdown, mid-line, ending")},
+		{ID: "render", Step: "render", Label: tr("Xuất video", "Render video"), Kind: "script", Heavy: true, Hint: tr("MP4 1080p, khoảng 8–9 phút", "1080p MP4, about 8–9 minutes")},
+		{ID: "sheet", Step: "sheet", Label: tr("Chép bản nhạc", "Transcribe sheet music"), Kind: "script", Heavy: true, Hint: tr("Giai điệu và lời từ giọng hát, ra PDF; khoảng 30 giây", "Melody and lyrics from the vocal, as a PDF; about 30 seconds")},
+	}
 }
 
 func findAction(id string) *Action {
-	for i := range workflowActions {
-		if workflowActions[i].ID == id {
-			return &workflowActions[i]
+	acts := workflowActions()
+	for i := range acts {
+		if acts[i].ID == id {
+			return &acts[i]
 		}
 	}
 	return nil
@@ -101,8 +104,14 @@ Không hỏi lại người dùng. Khi cần quyết định, chọn mặc đị
 Không in hay ghi khoá API ra bất kỳ đâu. Trả lời cuối bằng tiếng Việt, ngắn gọn: đã làm gì, file nào đổi, còn gì cần người dùng quyết.
 `
 
+// projectPromptHeader starts every agent prompt run in a song folder. When the studio is in
+// English, the agent writes what the user reads in English; the instructions stay Vietnamese.
+func projectPromptHeader(skill, dir string) string {
+	return fmt.Sprintf(promptHeader, skill, dir) + tr("", "The studio is in English: write every note meant for the user (notes.md, your final reply) in English, even where this prompt says Vietnamese. Song lyrics stay in their sung language.\n")
+}
+
 func buildActionPrompt(action, skill, dir string, req ActionRequest, d ProjectDetail) (string, error) {
-	head := fmt.Sprintf(promptHeader, skill, dir)
+	head := projectPromptHeader(skill, dir)
 	var body string
 	switch action {
 	case "lyrics.agent":
@@ -130,28 +139,19 @@ Quy tắc:
 Ghi ra:
 - %[1]s/suno/style.txt: nội dung ô Styles.
 - %[1]s/suno/lyrics.txt: thêm mô tả ngắn bằng tiếng Anh vào từng thẻ đoạn (ví dụ [Verse 2: đàn tranh and soft strings join]), đúng yêu cầu (không bộ gõ thì không nhắc drums/percussion). Không đổi dòng lời nào.
-- %[1]s/suno/profile.md (tiếng Việt): bài mẫu cho thấy gì, các yêu cầu đã áp ra sao, dựa trên profile nào, Vocal Gender, và khối Styles.
 - %[1]s/project.json: cập nhật "vocal" ("Male"/"Female") và "profile" (id profile nền hoặc "custom"), giữ nguyên các khoá khác.`, dir, profileInstruction(req, skill))
 	case "suno.agent":
 		if d.SunoLyrics == "" {
-			return "", errors.New("chưa có prompt: bấm Tạo prompt Suno trước")
+			return "", errors.New(tr("chưa có prompt: bấm Tạo prompt Suno trước", "no prompt yet: click Create Suno prompt first"))
 		}
 		body = fmt.Sprintf(`Việc: bước 4 của skill. Điền suno.com/create qua CUA theo references/suno-cua-fill.md.
 - Lyrics: nội dung %[1]s/suno/lyrics.txt. Styles: %[1]s/suno/style.txt.
 - Vocal Gender và tên bài lấy từ %[1]s/project.json ("vocal", "title" + "subtitle").
 - Kiểm tra từng ô sau khi dán, kiểm tra thanh địa chỉ không bị dán nhầm.
 - TUYỆT ĐỐI không bấm Create.`, dir)
-	case "ref.save.agent":
-		if strings.TrimSpace(d.Profile) == "" {
-			return "", errors.New("chưa có suno/profile.md: bấm Tạo prompt Suno trước")
-		}
-		body = fmt.Sprintf(`Việc: thêm kiểu phối trong %[1]s/suno/profile.md và %[1]s/suno/style.txt vào skill thành một profile dùng lại được.
-- Sửa references/style-profiles.md: thêm mục "## <chữ cái kế tiếp>. <tên>" (tên theo ghi chú của người dùng, nếu không có thì theo đặc điểm chính), đúng định dạng các profile hiện có: số đo, khối Styles, Vocal Gender, thẻ đoạn. Không đổi các profile cũ.
-- Cập nhật SKILL.md và references/lyric-review.md chỉ ở chỗ liệt kê lựa chọn profile, nếu cần.
-- Làm theo luồng update của ~/.claude/skills/ak-skill-creator nếu có, rồi chạy quick_validate, lint_cruft --routing và test trong scripts/tests.`, dir)
 	case "scenes.agent":
 		if len(d.Timings) == 0 {
-			return "", errors.New("chưa có timing: chạy bước Canh lời trước")
+			return "", errors.New(tr("chưa có timing: chạy bước Canh lời trước", "no timing yet: run the Align lyrics step first"))
 		}
 		body = sceneBody(dir, d.Config)
 	default:
@@ -239,7 +239,7 @@ func pipelineSpecs(name string, cfg Config, d ProjectDetail, req ActionRequest) 
 	switch name {
 	case "suno":
 		if strings.TrimSpace(d.Lyrics) == "" {
-			return nil, nil, errors.New("cần có lời bài hát trước")
+			return nil, nil, errors.New(tr("cần có lời bài hát trước", "add the song lyrics first"))
 		}
 		wait := []int{}
 		unanalysed := false
@@ -268,7 +268,7 @@ func pipelineSpecs(name string, cfg Config, d ProjectDetail, req ActionRequest) 
 		}
 	case "video":
 		if d.Audio == "" {
-			return nil, nil, errors.New("cần thêm file nhạc M4A trước")
+			return nil, nil, errors.New(tr("cần thêm file nhạc M4A trước", "add the M4A audio file first"))
 		}
 		var pc projectConfig
 		_ = json.Unmarshal(d.Config, &pc)
@@ -290,7 +290,7 @@ func pipelineSpecs(name string, cfg Config, d ProjectDetail, req ActionRequest) 
 			}
 		}
 		timed := last() // the lead sheet only needs final timings, so it runs beside the scene work
-		header := fmt.Sprintf(promptHeader, cfg.SkillDir, d.Dir) + "\n"
+		header := projectPromptHeader(cfg.SkillDir, d.Dir) + "\n"
 		switch {
 		case len(pc.Scenes) == 0:
 			if err := addAgent("scenes.agent", header+sceneBody(d.Dir, d.Config), last()); err != nil {
@@ -331,30 +331,30 @@ func scriptArgv(action, skill, dir string, req ActionRequest, d ProjectDetail) (
 	switch action {
 	case "ref.analyze":
 		if len(d.Refs) == 0 {
-			return nil, "", errors.New("chưa có bài mẫu")
+			return nil, "", errors.New(tr("chưa có bài mẫu", "no reference songs yet"))
 		}
 		argv := []string{"/bin/bash", "-c", `set -o pipefail; PY=$(bash scripts/setup-video-env.sh) || exit 1
 for f in "$@"; do echo "== $(basename "$f")"; "$PY" scripts/analyze-reference.py "$f" 2>/dev/null | tee "$f.analysis.txt" || exit 1; done`, "analyze"}
 		for _, r := range d.Refs {
 			argv = append(argv, filepath.Join(dir, r.Path))
 		}
-		return argv, "Phân tích bài mẫu", nil
+		return argv, tr("Phân tích bài mẫu", "Analyze references"), nil
 	case "align":
 		if d.Audio == "" && !req.chained {
-			return nil, "", errors.New("chưa có file nhạc")
+			return nil, "", errors.New(tr("chưa có file nhạc", "no audio file yet"))
 		}
-		return []string{"/bin/bash", "-c", py + `scripts/karaoke-align.py "$1"`, "align", dir}, "Canh lời từng chữ", nil
+		return []string{"/bin/bash", "-c", py + `scripts/karaoke-align.py "$1"`, "align", dir}, tr("Canh lời từng chữ", "Word-by-word alignment"), nil
 	case "trim":
 		if len(d.Timings) == 0 && !req.chained {
-			return nil, "", errors.New("chưa có timing: chạy Canh lời trước")
+			return nil, "", errors.New(tr("chưa có timing: chạy Canh lời trước", "no timing yet: run Align lyrics first"))
 		}
 		at := req.VocalAt
 		if at < 5 || at > 30 {
 			at = 11.5
 		}
-		return []string{"/bin/bash", "-c", py + `scripts/trim-intro.py "$1" --vocal-at "$2"`, "trim", dir, fmt.Sprintf("%.2f", at)}, "Rút ngắn intro", nil
+		return []string{"/bin/bash", "-c", py + `scripts/trim-intro.py "$1" --vocal-at "$2"`, "trim", dir, fmt.Sprintf("%.2f", at)}, tr("Rút ngắn intro", "Trim intro"), nil
 	case "images":
-		return []string{"python3", "scripts/generate-scene-images.py", dir}, "Tạo ảnh cảnh", nil
+		return []string{"python3", "scripts/generate-scene-images.py", dir}, tr("Tạo ảnh cảnh", "Generate scene images"), nil
 	case "stills":
 		argv := []string{"/bin/bash", "-c", py + `scripts/render-karaoke-video.py "$1" still "${@:2}"`, "stills", dir}
 		if len(req.Times) == 0 {
@@ -363,21 +363,21 @@ for f in "$@"; do echo "== $(basename "$f")"; "$PY" scripts/analyze-reference.py
 		for _, t := range req.Times {
 			argv = append(argv, fmt.Sprintf("%.1f", t))
 		}
-		return argv, "Render khung hình xem trước", nil
+		return argv, tr("Render khung hình xem trước", "Render preview frames"), nil
 	case "render":
 		name := safeFileName(d.Title+" "+d.Subtitle, filepath.Base(dir)) + " - Karaoke.mp4"
 		out := filepath.Join(dir, name)
-		return []string{"/bin/bash", "-c", py + `scripts/render-karaoke-video.py "$1" full "$2"`, "render", dir, out}, "Xuất video karaoke", nil
+		return []string{"/bin/bash", "-c", py + `scripts/render-karaoke-video.py "$1" full "$2"`, "render", dir, out}, tr("Xuất video karaoke", "Render karaoke video"), nil
 	case "sheet":
 		if len(d.Timings) == 0 && !req.chained {
-			return nil, "", errors.New("chưa có timing: chạy Canh lời trước")
+			return nil, "", errors.New(tr("chưa có timing: chạy Canh lời trước", "no timing yet: run Align lyrics first"))
 		}
 		if !contains([]string{"", "2/4", "3/4", "4/4"}, req.Meter) || !sheetKey.MatchString(req.Key) {
-			return nil, "", errors.New("nhịp hoặc giọng không hợp lệ")
+			return nil, "", errors.New(tr("nhịp hoặc giọng không hợp lệ", "invalid meter or key"))
 		}
 		out := filepath.Join(dir, safeFileName(d.Title+" "+d.Subtitle, filepath.Base(dir))+" - Bản nhạc")
 		return []string{"/bin/bash", "-c", py + `scripts/transcribe-sheet.py "$1" --out "$2" ${3:+--meter "$3"} ${4:+--key "$4"}`,
-			"sheet", dir, out, req.Meter, req.Key}, "Chép bản nhạc", nil
+			"sheet", dir, out, req.Meter, req.Key}, tr("Chép bản nhạc", "Transcribe sheet music"), nil
 	}
 	return nil, "", fmt.Errorf("unknown script action %q", action)
 }

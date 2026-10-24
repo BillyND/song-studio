@@ -1,5 +1,5 @@
 // App shell: sidebar navigation, system meter, routing, run drawer and toasts.
-import { html, render, useEffect, useErrorBoundary, api, store, useStore, useRoute, theme, toastError } from "./core.js";
+import { html, render, useEffect, useErrorBoundary, api, store, useStore, useRoute, theme, toastError, t } from "./core.js";
 import { Icon } from "./icons.js";
 import { Toasts, Btn } from "./ui.js";
 import { Drawer } from "./console.js";
@@ -16,26 +16,26 @@ function Sidebar({ route }) {
   const boot = useStore((s) => s.boot);
   const section = route[0] || "";
   const nav = [
-    { href: "#/", icon: "music", label: "Bài hát", on: section === "" || section === "p" },
-    { href: "#/runs", icon: "terminal", label: "Lượt chạy", on: section === "runs", badge: system && (system.running + system.queued) || 0 },
+    { href: "#/", icon: "music", label: t("Bài hát"), on: section === "" || section === "p" },
+    { href: "#/runs", icon: "terminal", label: t("Lượt chạy"), on: section === "runs", badge: system && (system.running + system.queued) || 0 },
     { href: "#/skill", icon: "code", label: "Skill", on: section === "skill" },
-    { href: "#/settings", icon: "settings", label: "Cài đặt", on: section === "settings" },
+    { href: "#/settings", icon: "settings", label: t("Cài đặt"), on: section === "settings" },
   ];
   const load = system?.load?.[0] ?? 0;
   const cpus = system?.cpus || 8;
   const ratio = Math.min(1, load / cpus);
   return html`<nav class="sidebar">
     <div class="brand"><div class="brand-mark"><${Icon} name="lotus" size=${20} stroke=${2.2} /></div>
-      <div class="brand-text"><div class="brand-name">Song Studio</div><div class="brand-sub">Lời → Suno → Video</div></div></div>
+      <div class="brand-text"><div class="brand-name">Song Studio</div><div class="brand-sub">${t("Lời → Suno → Video")}</div></div></div>
     ${nav.map((n) => html`<a class=${"nav-item" + (n.on ? " active" : "")} href=${n.href} title=${n.label}><${Icon} name=${n.icon} size=${17} /><span class="nav-label">${n.label}</span>
       ${n.badge ? html`<span class="nav-badge">${n.badge}</span>` : null}</a>`)}
     <div class="sidebar-foot">
-      <div class="meter" title="Tải trung bình 1 phút so với số nhân CPU">
-        <div class="meter-row"><span>Tải máy</span><b>${load.toFixed(1)} / ${cpus}</b></div>
+      <div class="meter" title=${t("Tải trung bình 1 phút so với số nhân CPU")}>
+        <div class="meter-row"><span>${t("Tải máy")}</span><b>${load.toFixed(1)} / ${cpus}</b></div>
         <div class="meter-bar"><i class=${ratio > 0.9 ? "high" : ratio > 0.6 ? "mid" : ""} style=${{ width: Math.max(4, ratio * 100) + "%" }}></i></div>
-        <div class="meter-row"><span>Agent đang mở</span><b>${system ? Object.values(system.agentProcesses || {}).reduce((a, b) => a + b, 0) : "—"}</b></div>
+        <div class="meter-row"><span>${t("Agent đang mở")}</span><b>${system ? Object.values(system.agentProcesses || {}).reduce((a, b) => a + b, 0) : "—"}</b></div>
       </div>
-      <div class="chips">${(boot?.agents || []).map((a) => html`<span class=${"chip" + (a.available ? " on" : "")} title=${a.version || "không thấy"}><span class="dot"></span>${a.name}</span>`)}</div>
+      <div class="chips">${(boot?.agents || []).map((a) => html`<span class=${"chip" + (a.available ? " on" : "")} title=${a.version || t("không thấy")}><span class="dot"></span>${a.name}</span>`)}</div>
       <div class="row" style="justify-content:space-between">
         <span class="muted small">v${boot?.version}</span>
         <${ThemeToggle} />
@@ -46,7 +46,7 @@ function Sidebar({ route }) {
 
 function ThemeToggle() {
   const cur = useStore((s) => s.theme);
-  return html`<${Btn} kind="ghost" size="sm" icon=${cur === "dark" ? "sun" : "moon"} title="Đổi giao diện sáng/tối"
+  return html`<${Btn} kind="ghost" size="sm" icon=${cur === "dark" ? "sun" : "moon"} title=${t("Đổi giao diện sáng/tối")}
     onClick=${() => theme.set(cur === "dark" ? "light" : "dark")} />`;
 }
 
@@ -55,16 +55,16 @@ const pageBuild = document.querySelector('meta[name="studio-build"]')?.content;
 function UpdateBanner() {
   const build = useStore((s) => s.system?.build);
   if (!build || !pageBuild || build === pageBuild) return null;
-  return html`<div class="update-banner"><${Icon} name="refresh" />Studio vừa được cập nhật. Tải lại trang để dùng bản mới.
-    <${Btn} size="sm" kind="primary" onClick=${() => location.reload()}>Tải lại</${Btn}></div>`;
+  return html`<div class="update-banner"><${Icon} name="refresh" />${t("Studio vừa được cập nhật. Tải lại trang để dùng bản mới.")}
+    <${Btn} size="sm" kind="primary" onClick=${() => location.reload()}>${t("Tải lại")}</${Btn}></div>`;
 }
 
 // Boundary keeps one broken view from taking the whole app down.
 function Boundary({ children, resetKey }) {
   const [err, reset] = useErrorBoundary((e) => console.error(e));
   useEffect(() => { if (err) reset(); }, [resetKey]);
-  if (err) return html`<div class="page"><div class="warn-box">Trang này gặp lỗi: ${String(err.message || err)}.
-    <a style="text-decoration:underline;cursor:pointer;margin-left:8px" onClick=${reset}>Thử lại</a></div></div>`;
+  if (err) return html`<div class="page"><div class="warn-box">${t("Trang này gặp lỗi: {error}.", { error: String(err.message || err) })}
+    <a style="text-decoration:underline;cursor:pointer;margin-left:8px" onClick=${reset}>${t("Thử lại")}</a></div></div>`;
   return children;
 }
 
@@ -94,7 +94,7 @@ function App() {
   }
   return html`<div class=${"shell" + (consoleRun ? " with-drawer" : "")}>
     <${Sidebar} route=${route} />
-    <main class="main">${boot && !boot.skillExists ? html`<div class="page"><div class="warn-box">Không thấy skill ở ${boot.config.skillDir}. Sửa đường dẫn trong Cài đặt.</div></div>` : null}<${Boundary} resetKey=${route.join("/")}>${page}</${Boundary}></main>
+    <main class="main">${boot && !boot.skillExists ? html`<div class="page"><div class="warn-box">${t("Không thấy skill ở {path}. Sửa đường dẫn trong Cài đặt.", { path: boot.config.skillDir })}</div></div>` : null}<${Boundary} resetKey=${route.join("/")}>${page}</${Boundary}></main>
     <${Drawer} />
     <${Toasts} />
     <${UpdateBanner} />

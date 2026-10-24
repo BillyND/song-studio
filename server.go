@@ -68,6 +68,8 @@ func (a *App) routes() http.Handler {
 	mux.HandleFunc("GET /api/projects", a.listProjects)
 	mux.HandleFunc("POST /api/projects", a.createProject)
 	mux.HandleFunc("GET /api/projects/{slug}", a.getProject)
+	mux.HandleFunc("DELETE /api/projects/{slug}", a.deleteProject)
+	mux.HandleFunc("DELETE /api/projects/{slug}/video", a.deleteVideo)
 	mux.HandleFunc("PUT /api/projects/{slug}/files", a.putProjectFile)
 	mux.HandleFunc("POST /api/projects/{slug}/audio", a.importAudio)
 	mux.HandleFunc("POST /api/projects/{slug}/refs", a.addRef)
@@ -386,6 +388,37 @@ func (a *App) removeRef(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	d, _ := a.detail(r.PathValue("slug"))
+	writeJSON(w, 200, d)
+}
+
+var errBusy = errors.New("bài đang có việc chạy, hãy dừng hoặc chờ xong rồi xoá")
+
+// deleteProject and deleteVideo move files to the Trash rather than erasing them.
+func (a *App) deleteProject(w http.ResponseWriter, r *http.Request) {
+	slug := r.PathValue("slug")
+	if a.runs.Busy(slug) {
+		fail(w, http.StatusConflict, errBusy)
+		return
+	}
+	dst, err := a.projects.TrashProject(slug, a.home)
+	if err != nil {
+		failFor(w, err)
+		return
+	}
+	writeJSON(w, 200, map[string]string{"trashed": dst})
+}
+
+func (a *App) deleteVideo(w http.ResponseWriter, r *http.Request) {
+	slug := r.PathValue("slug")
+	if a.runs.Busy(slug) {
+		fail(w, http.StatusConflict, errBusy)
+		return
+	}
+	if _, err := a.projects.TrashVideo(slug, r.URL.Query().Get("path"), a.home); err != nil {
+		failFor(w, err)
+		return
+	}
+	d, _ := a.detail(slug)
 	writeJSON(w, 200, d)
 }
 

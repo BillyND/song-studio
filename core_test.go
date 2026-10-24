@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -696,5 +697,59 @@ func TestChainEventsStartWithQueuedStatus(t *testing.T) {
 		if len(ev) == 0 || ev[0].Kind != "status" || !strings.Contains(ev[0].Title, "Chờ") && !strings.Contains(ev[0].Title, "chờ") {
 			t.Fatalf("first event should be the queued status: %+v", ev[0])
 		}
+	}
+}
+
+func TestDeleteMovesToTrash(t *testing.T) {
+	home := t.TempDir()
+	cs, _ := loadConfig(filepath.Join(home, "c.json"), home)
+	c := cs.Get()
+	c.ProjectsDir = filepath.Join(home, "songs")
+	c.SkillDir = t.TempDir()
+	cs.cfg = c
+	os.MkdirAll(filepath.Join(home, ".Trash"), 0o700)
+	m, _ := newManager(t.TempDir(), func() (int, int) { return 1, 1 })
+	defer m.Shutdown(time.Second)
+	app := &App{cfg: cs, runs: m, projects: Projects{cfg: cs}, token: "tok", home: home, version: "t", build: "b", started: time.Now()}
+	h := app.routes()
+	del := func(path string) *httptest.ResponseRecorder {
+		r := httptest.NewRequest("DELETE", path, nil)
+		r.Host = "127.0.0.1:4317"
+		r.Header.Set("X-Studio-Token", "tok")
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, r)
+		return w
+	}
+	slug, _ := app.projects.Create("Bài", "", "a", nil)
+	d, _ := app.projects.Detail(slug, nil)
+	os.WriteFile(filepath.Join(d.Dir, "Bài - Karaoke.mp4"), []byte("v"), 0o644)
+	os.WriteFile(filepath.Join(d.Dir, "lyrics-copy.txt"), []byte("x"), 0o644)
+
+	if w := del("/api/projects/" + slug + "/video?path=lyrics-copy.txt"); w.Code != http.StatusNotFound {
+		t.Fatalf("only listed karaoke videos may be trashed, got %d", w.Code)
+	}
+	if w := del("/api/projects/" + slug + "/video?path=../c.json"); w.Code != http.StatusNotFound {
+		t.Fatalf("paths outside the video list must be refused, got %d", w.Code)
+	}
+	if w := del("/api/projects/" + slug + "/video?path=" + url.QueryEscape("Bài - Karaoke.mp4")); w.Code != 200 {
+		t.Fatalf("trash video: %d %s", w.Code, w.Body.String())
+	}
+	if !exists(filepath.Join(home, ".Trash", "Bài - Karaoke.mp4")) || exists(filepath.Join(d.Dir, "Bài - Karaoke.mp4")) {
+		t.Fatal("video should be in the Trash")
+	}
+
+	m.Submit(RunSpec{Kind: "agent", Project: slug, Cwd: d.Dir, Argv: []string{"/bin/sh", "-c", "sleep 5"}})
+	if w := del("/api/projects/" + slug); w.Code != http.StatusConflict {
+		t.Fatalf("a song with a running job must not be deleted, got %d", w.Code)
+	}
+	m.Shutdown(time.Second)
+	if w := del("/api/projects/" + slug); w.Code != 200 {
+		t.Fatalf("trash project: %d %s", w.Code, w.Body.String())
+	}
+	if exists(d.Dir) || !exists(filepath.Join(home, ".Trash", slug)) {
+		t.Fatal("project folder should be in the Trash")
+	}
+	if w := del("/api/projects/.."); w.Code == 200 {
+		t.Fatal("dot slug must be refused")
 	}
 }

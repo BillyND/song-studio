@@ -40,6 +40,7 @@ export function ProjectPage({ slug, step }) {
         <div class="hero-actions">
           <${Btn} size="sm" icon="folder" onClick=${() => api(`/api/projects/${slug}/open`, { method: "POST", body: { path: "" } }).catch(toastError)}>Mở thư mục</${Btn}>
           <${FreeAgentButton} slug=${slug} />
+          <${Btn} size="sm" icon="trash" title="Xoá bài" onClick=${() => trashProject(d, slug)} />
           <${PrimaryAction} d=${d} slug=${slug} />
         </div>
       </div>
@@ -475,12 +476,28 @@ function StillsStep({ d, slug, stamp }) {
   </div>`;
 }
 
-function RenderStep({ d, slug, stamp }) {
+// Deletes move files to the macOS Trash, so a slip can be undone with Finder's "Put Back".
+async function trashProject(d, slug) {
+  const name = [d.title, d.subtitle].filter(Boolean).join(" – ");
+  if (!confirm(`Chuyển cả bài "${name}" vào Thùng rác?\n\nThư mục ${d.dir} (lời, nhạc, ảnh, video) sẽ nằm trong Thùng rác, lấy lại được bằng Finder cho tới khi bạn dọn Thùng rác.`)) return;
+  try {
+    await api(`/api/projects/${encodeURIComponent(slug)}`, { method: "DELETE" });
+    toast("Đã chuyển bài vào Thùng rác");
+    go("/");
+  } catch (e) { toastError(e); }
+}
+
+function RenderStep({ d, slug, stamp, reload }) {
   const video = d.videos[d.videos.length - 1];
   const open = (reveal) => api(`/api/projects/${encodeURIComponent(slug)}/open`, { method: "POST", body: { path: video, reveal } }).catch(toastError);
+  const trash = async () => {
+    if (!confirm(`Chuyển video "${video}" vào Thùng rác?\n\nBạn có thể xuất lại bất cứ lúc nào; bản đã chép sang Downloads (nếu có) không bị đụng tới.`)) return;
+    try { await api(`/api/projects/${encodeURIComponent(slug)}/video?path=${encodeURIComponent(video)}`, { method: "DELETE" }); toast("Đã chuyển video vào Thùng rác"); reload(); }
+    catch (e) { toastError(e); }
+  };
   return html`<div class="stack">
     ${video ? html`<video controls preload="metadata" src=${media(slug, video, stamp)}></video>
-      <div class="row wrap"><b class="grow">${video}</b><${Btn} size="sm" icon="play" onClick=${() => open(false)}>Mở bằng QuickTime</${Btn}><${Btn} size="sm" icon="folder" onClick=${() => open(true)}>Hiện trong Finder</${Btn}></div>`
+      <div class="row wrap"><b class="grow">${video}</b><${Btn} size="sm" icon="play" onClick=${() => open(false)}>Mở bằng QuickTime</${Btn}><${Btn} size="sm" icon="folder" onClick=${() => open(true)}>Hiện trong Finder</${Btn}><${Btn} size="sm" kind="danger" icon="trash" onClick=${trash}>Xoá video</${Btn}></div>`
       : html`<${Empty} icon="film" title="Chưa có video">Xuất video sau khi đã xem trước khung hình.</${Empty}>`}
     <${ChainStatus} slug=${slug} steps=${["align", "trim", "scenes", "stills", "render"]} title="Chuỗi video" />
     ${!d.audio && html`<div class="warn-box">Chưa có nhạc. Thêm file M4A từ Suno ở <a href=${`#/p/${slug}/audio`} style="color:inherit;text-decoration:underline">bước 3</a> trước.</div>`}

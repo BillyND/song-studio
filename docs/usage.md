@@ -65,6 +65,14 @@ The New Song dialog takes the same reference songs and brief, and by default sta
 - As soon as the music is added, the Nhạc step shows **Làm video tự động**; one click runs the
   whole video chain (about 12–25 minutes) and the page can be closed meanwhile.
 
+### Deleting a video or a song
+
+- **Xoá video** (Xuất video step) and the trash button in the song header (**Xoá bài**) move
+  the file or the whole song folder to the macOS Trash, so Finder's *Put Back* undoes them.
+  Disk space is freed only when the Trash is emptied.
+- Both are refused while any job of that song is queued or running.
+- Copies outside the song folder, such as a video copied to `~/Downloads`, are not touched.
+
 ## Chains and parallel work
 
 **Tạo prompt Suno** queues a chain: reference analysis (if any file is unanalysed) runs in

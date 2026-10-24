@@ -554,6 +554,39 @@ func (p Projects) RemoveRef(slug, name string) error {
 	return os.Remove(full)
 }
 
+// TrashVideo moves one rendered karaoke video to the Trash; rel must be a video the project lists.
+func (p Projects) TrashVideo(slug, rel, home string) (string, error) {
+	dir, err := p.dir(slug)
+	if err != nil {
+		return "", err
+	}
+	pc, _ := readConfig(dir)
+	if !contains(karaokeVideos(dir, pc.Audio), rel) {
+		return "", os.ErrNotExist
+	}
+	return moveToTrash(home, filepath.Join(dir, rel))
+}
+
+// TrashProject moves the whole song folder to the Trash, so it can be put back from Finder.
+func (p Projects) TrashProject(slug, home string) (string, error) {
+	dir, err := p.dir(slug)
+	if err != nil {
+		return "", err
+	}
+	return moveToTrash(home, dir)
+}
+
+func moveToTrash(home, src string) (string, error) {
+	trash := filepath.Join(home, ".Trash")
+	base := filepath.Base(src)
+	dst := filepath.Join(trash, base)
+	if exists(dst) {
+		ext := filepath.Ext(base)
+		dst = filepath.Join(trash, strings.TrimSuffix(base, ext)+" "+time.Now().Format("15.04.05")+ext)
+	}
+	return dst, os.Rename(src, dst)
+}
+
 // safeFileName turns a song title into a file name that stays inside its folder.
 func safeFileName(title, fallback string) string {
 	s := strings.Map(func(r rune) rune {

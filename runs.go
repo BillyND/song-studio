@@ -661,6 +661,16 @@ func (m *Manager) Shutdown(timeout time.Duration) {
 	}
 }
 
+// Busy reports whether any run, including a free agent run, is queued or running for a project.
+func (m *Manager) Busy(project string) bool {
+	for _, meta := range m.List(200) {
+		if meta.Project == project && meta.active() {
+			return true
+		}
+	}
+	return false
+}
+
 // ActiveFor reports the active run for a project step, if any.
 func (m *Manager) ActiveFor(project string) map[string]string {
 	out := map[string]string{}

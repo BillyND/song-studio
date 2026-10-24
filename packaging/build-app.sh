@@ -27,13 +27,22 @@ cp "$ROOT/packaging/AppIcon.icns" "$APP/Contents/Resources/AppIcon.icns"
 rsync -a --delete --exclude '__pycache__' --exclude '*.pyc' --exclude '.DS_Store' --exclude '/plans' --exclude '.git' \
   "$SKILL/" "$APP/Contents/Resources/skill/"
 
-# ad-hoc signatures (no Apple account): inner code first, then the app
-codesign --force --sign - "$APP/Contents/Frameworks/Sparkle.framework/Versions/B/XPCServices/Installer.xpc"
-codesign --force --sign - "$APP/Contents/Frameworks/Sparkle.framework/Versions/B/XPCServices/Downloader.xpc"
-codesign --force --sign - "$APP/Contents/Frameworks/Sparkle.framework/Versions/B/Autoupdate"
-codesign --force --sign - "$APP/Contents/Frameworks/Sparkle.framework/Versions/B/Updater.app"
-codesign --force --sign - "$APP/Contents/Frameworks/Sparkle.framework"
-codesign --force --sign - "$APP/Contents/MacOS/que-huong-studio"
-codesign --force --sign - "$APP"
+# Sign with the studio's own self-signed certificate (login keychain, made once by
+# packaging/make-signing-cert.sh). Sparkle installs an update only when it is signed like the
+# installed app; ad-hoc signatures differ on every build, so they break updates. Gatekeeper still
+# treats the app as unidentified either way (no Apple Developer ID).
+IDENTITY="${SIGN_IDENTITY:-Que Huong Studio Signing}"
+if ! security find-identity -p codesigning | grep -q "\"$IDENTITY\""; then
+  echo "missing code signing identity \"$IDENTITY\": run packaging/make-signing-cert.sh" >&2; exit 1
+fi
+sign() { codesign --force --timestamp=none --sign "$IDENTITY" "$@" 2>&1 | grep -v "replacing existing signature" >&2 || true; }
+# inner code first, then the app
+sign "$APP/Contents/Frameworks/Sparkle.framework/Versions/B/XPCServices/Installer.xpc"
+sign "$APP/Contents/Frameworks/Sparkle.framework/Versions/B/XPCServices/Downloader.xpc"
+sign "$APP/Contents/Frameworks/Sparkle.framework/Versions/B/Autoupdate"
+sign "$APP/Contents/Frameworks/Sparkle.framework/Versions/B/Updater.app"
+sign "$APP/Contents/Frameworks/Sparkle.framework"
+sign "$APP/Contents/MacOS/que-huong-studio"
+sign "$APP"
 codesign --verify --deep --strict "$APP"
 echo "$APP"

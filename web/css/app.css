@@ -494,3 +494,7 @@ img, video, audio, pre { max-width: 100%; }
 @media (max-width: 720px) { .doctor-fix { max-width: 100%; flex-basis: 100%; padding-left: 34px; } }
 
 a.btn { text-decoration: none; }
+
+/* theme switch: no per-element colour fades; one quick page crossfade instead (see theme.set) */
+.theme-switching *, .theme-switching *::before, .theme-switching *::after { transition: none !important; }
+::view-transition-old(root), ::view-transition-new(root) { animation-duration: .16s; }

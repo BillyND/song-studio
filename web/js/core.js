@@ -123,7 +123,22 @@ export async function copyText(text) {
 
 export const theme = {
   get: () => localStorageGet("theme") || "dark",
-  set(v) { document.documentElement.dataset.theme = v; localStorageSet("theme", v); },
+  // Switching themes restyles every element. Per-element colour transitions made that look like
+  // lag (each part faded at its own pace), so they are paused for the switch, and where the
+  // engine supports it the whole page crossfades once instead.
+  set(v) {
+    const root = document.documentElement;
+    if (root.dataset.theme === v) return;
+    const apply = () => {
+      root.classList.add("theme-switching");
+      root.dataset.theme = v;
+      localStorageSet("theme", v);
+      requestAnimationFrame(() => requestAnimationFrame(() => root.classList.remove("theme-switching")));
+    };
+    const calm = matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (document.startViewTransition && !calm && root.dataset.theme) document.startViewTransition(apply);
+    else apply();
+  },
 };
 export function localStorageGet(k) { try { return localStorage.getItem("qhs." + k); } catch { return null; } }
 export function localStorageSet(k, v) { try { localStorage.setItem("qhs." + k, v); } catch { /* private mode */ } }

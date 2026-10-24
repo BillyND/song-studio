@@ -42,17 +42,15 @@ final class ServerProcess {
     }
 
     /// SIGTERM, then SIGKILL if the server has not exited in time.
-    /// `done` always runs later on the main queue, never inside the caller (applicationShouldTerminate
-    /// must return .terminateLater before it may reply).
-    func stop(timeout: TimeInterval = 12, done: @escaping () -> Void) {
-        guard let p = proc, p.isRunning else { DispatchQueue.main.async(execute: done); return }
+    /// Stops the server and waits for it, on the calling thread. Quitting uses this directly instead of
+    /// .terminateLater: Sparkle can ask the app to quit from inside a main-queue block, and a reply
+    /// queued on the main queue then never runs, so the app hangs with its update half done.
+    func stopAndWait(timeout: TimeInterval = 12) {
+        guard let p = proc, p.isRunning else { return }
         p.terminate()
-        DispatchQueue.global().async {
-            let deadline = Date().addingTimeInterval(timeout)
-            while p.isRunning && Date() < deadline { usleep(100_000) }
-            if p.isRunning { kill(p.processIdentifier, SIGKILL) }
-            DispatchQueue.main.async(execute: done)
-        }
+        let deadline = Date().addingTimeInterval(timeout)
+        while p.isRunning && Date() < deadline { usleep(50_000) }
+        if p.isRunning { kill(p.processIdentifier, SIGKILL) }
     }
 
     private func openLog() -> FileHandle? {

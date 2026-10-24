@@ -119,13 +119,17 @@ own page:
 
 - listens on loopback only and refuses any other address;
 - the `Host` header must be `127.0.0.1`, `localhost` or `[::1]` on its port (DNS rebinding);
-- every POST/PUT carries a per-launch token from the page and, when present, a same-origin
+- every POST/PUT/DELETE carries a per-launch token from the page and, when present, a same-origin
   `Origin` (CSRF); the page's CSP allows only its own scripts;
 - requests a browser marks `Sec-Fetch-Site: cross-site` or `same-site` are refused, so other
   pages cannot even probe media or trigger read-only endpoints;
 - `project.json` and skill edits carry the hash they were based on and are refused if an agent
   changed the file meanwhile;
 - file access is confined to the skill folder and the songs folder, symlinks included.
+
+Opening the studio from a phone or another computer is deliberately unsupported: it would
+need a LAN listener plus a login. Small screens are covered by the responsive layout (checked
+at 390 px and 768 px in Chrome) for a narrow browser window on the Mac.
 
 ## Reliability
 

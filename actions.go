@@ -89,7 +89,7 @@ func profileInstruction(req ActionRequest, skill string) string {
 			}
 		}
 	}
-	return "Chưa chọn profile: tự chọn profile gần nhất trong references/style-profiles.md theo số đo bài mẫu và yêu cầu mở rộng, rồi chỉnh theo chúng (nếu không có bài mẫu và yêu cầu thì dùng profile mặc định của skill)."
+	return "Phối theo bài mẫu: lấy tempo, nhịp, giọng, nhạc cụ, bộ gõ, bass và cấu trúc từ ref/*.analysis.txt, rồi áp yêu cầu mở rộng. references/style-profiles.md chỉ để học cách viết Styles và thẻ đoạn, không ép bài theo một profile có sẵn. Khi không có bài mẫu thì mới dùng profile mặc định của skill."
 }
 
 const promptHeader = `Bạn đang chạy trong Quê Hương Studio, không có người trả lời giữa chừng.

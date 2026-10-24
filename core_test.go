@@ -515,7 +515,7 @@ func TestSkillProfilesFromFile(t *testing.T) {
 	if len(got) != 3 || got[1].ID != "B" || got[2].Title != "Dân ca mượt" {
 		t.Fatalf("profiles %+v", got)
 	}
-	if !strings.Contains(profileInstruction(ActionRequest{Profile: "C"}, dir), "profile C") || !strings.Contains(profileInstruction(ActionRequest{}, dir), "tự chọn") {
+	if !strings.Contains(profileInstruction(ActionRequest{Profile: "C"}, dir), "profile C") || !strings.Contains(profileInstruction(ActionRequest{}, dir), "Phối theo bài mẫu") {
 		t.Fatal("profile instruction")
 	}
 }

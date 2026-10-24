@@ -254,20 +254,10 @@ function RefsPanel({ d, slug, reload, stamp }) {
   </div>`;
 }
 
-function ProfileSelect({ value, onChange }) {
-  const profiles = useStore((s) => s.boot?.profiles || []);
-  return html`<select class="select" value=${value} onChange=${(e) => onChange(e.target.value)} aria-label="Kiểu phối">
-    <option value="">Tự chọn theo bài mẫu & yêu cầu</option>
-    ${profiles.map((p) => html`<option value=${p.id}>${p.id} · ${p.title}</option>`)}
-  </select>`;
-}
-
 function LyricsStep({ d, slug, reload, stamp }) {
   const [text, setText] = useState(d.lyrics);
   const [brief, setBrief] = useState(d.brief);
   const [check, setCheck] = useState(null);
-  const cfg = safeJSON(d.config);
-  const [profile, setProfile] = useState(cfg.profile && cfg.profile !== "custom" ? cfg.profile : "");
   const [fixAll, setFixAll] = useState(false);
   const ag = useAgentChoice();
   const [busy, save] = useSave(slug, reload);
@@ -288,7 +278,7 @@ function LyricsStep({ d, slug, reload, stamp }) {
     setStarting(true);
     try {
       if (!(await saveAll())) return; // never build a prompt from text that failed to save
-      const metas = await runPipeline(slug, "suno", { agent: ag.agent, model: ag.model, profile, fixAll });
+      const metas = await runPipeline(slug, "suno", { agent: ag.agent, model: ag.model, fixAll });
       if (metas) go(`/p/${encodeURIComponent(slug)}/suno`);
     } finally { setStarting(false); }
   };
@@ -314,7 +304,6 @@ function LyricsStep({ d, slug, reload, stamp }) {
 
     <div class="cta">
       <div class="cta-fields">
-        <label class="field"><span>Kiểu phối</span><${ProfileSelect} value=${profile} onChange=${setProfile} /></label>
         <label class="field"><span>Agent</span><${AgentPicker} value=${ag.agent} onChange=${ag.setAgent} model=${ag.model} onModel=${ag.setModel} /></label>
         <${Switch} on=${fixAll} onChange=${setFixAll}>Sửa hết đề xuất cấu trúc lời</${Switch}>
       </div>
@@ -344,14 +333,13 @@ function CopyBlock({ title, text, extra, onSave, saving }) {
 
 function SunoStep({ d, slug, reload }) {
   const [busy, save] = useSave(slug, reload);
-  const [profileName, setProfileName] = useState("");
   const cfg = safeJSON(d.config);
   const n = [...(d.sunoStyle || "").trim()].length;
   const empty = !d.sunoLyrics && !d.sunoStyle;
   return html`<div class="stack">
     <${ChainStatus} slug=${slug} steps=${["lyrics", "suno"]} title="Chuỗi tạo prompt" />
     ${empty ? html`<${Empty} icon="sparkles" title="Chưa có prompt Suno">Ở <a href=${`#/p/${slug}/lyrics`} style="color:var(--accent)">bước 1</a>, thêm lời (và bài mẫu, yêu cầu nếu có) rồi bấm <b>Tạo prompt Suno</b>.</${Empty}>` : html`
-      <dl class="kv"><dt>Tên bài</dt><dd><b>${[cfg.title, cfg.subtitle].filter(Boolean).join(" ")}</b></dd><dt>Giọng</dt><dd>${cfg.vocal || "—"}</dd><dt>Kiểu phối</dt><dd>${cfg.profile || "—"}</dd></dl>
+      <dl class="kv"><dt>Tên bài</dt><dd><b>${[cfg.title, cfg.subtitle].filter(Boolean).join(" ")}</b></dd><dt>Giọng</dt><dd>${cfg.vocal || "—"}</dd></dl>
       <${CopyBlock} title="Styles" text=${(d.sunoStyle || "").trim()} extra=${html`<span class=${"pill " + (n > 1000 ? "bad" : "ok")}>${n}/1000</span>`} saving=${busy} onSave=${(v) => save("suno/style.txt", v)} />
       <${CopyBlock} title="Lyrics" text=${(d.sunoLyrics || "").trim()} saving=${busy} onSave=${(v) => save("suno/lyrics.txt", v)} />
       ${d.profile && html`<details open><summary class="section-title" style="cursor:pointer"><${Icon} name="wand" /><h3>Vì sao phối như vậy</h3></summary><div class="bubble" style="margin-top:8px"><${Markdown} text=${d.profile} /></div></details>`}
@@ -359,10 +347,6 @@ function SunoStep({ d, slug, reload }) {
       <${AgentAction} slug=${slug} action="suno.agent" title="Điền form suno.com/create" hint="Agent dùng CUA điều khiển Chrome; không bấm Create, bạn tự xem và bấm" />
       <div class="row wrap"><${Btn} icon="external" onClick=${() => window.open("https://suno.com/create", "_blank", "noopener")}>Mở Suno</${Btn}>
         <span class="muted small">Tạo xong, tải bản <b>M4A</b> (có sẵn timing lời) rồi sang bước Nhạc.</span></div>
-      <div class="action-bar"><div class="grow" style="min-width:200px"><div class="row" style="gap:8px"><${Icon} name="save" size=${15} /><b>Lưu kiểu phối này vào skill</b></div>
-        <div class="muted small">Thành profile mới trong skill, chọn lại được cho các bài sau</div></div>
-        <input class="input" style="max-width:220px" placeholder="tên, ví dụ Dân ca mượt" value=${profileName} onInput=${(e) => setProfileName(e.target.value)} />
-        <${Btn} icon="send" disabled=${!d.profile} onClick=${() => runAction(slug, "ref.save.agent", { note: profileName ? "Tên profile: " + profileName : "" })}>Lưu vào skill</${Btn}></div>
     `}
   </div>`;
 }

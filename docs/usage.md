@@ -44,8 +44,8 @@ Flags: `-addr 127.0.0.1:4317`, `-no-open`, `-config`, `-data`, `-version`.
 
 | Step | Done when | Actions |
 |---|---|---|
-| Lời, bài mẫu & yêu cầu | `lyrics.txt` has text | edit, lục bát check, reference songs (drop, pick from Downloads or paste a path; copied to `ref/`, analysed into `ref/<file>.analysis.txt`), the brief (`brief.md`) with prompt snippets, the arrangement profile (read from the skill, or chosen automatically), then **Tạo prompt Suno** |
-| Prompt Suno | `suno/lyrics.txt` and `suno/style.txt` exist and are newer than the lyrics, brief and analyses | chain status, copy/edit blocks, "why this arrangement" (`suno/profile.md`), agent: fill suno.com/create via CUA (never presses Create), agent: save the arrangement to the skill as a new profile |
+| Lời, bài mẫu & yêu cầu | `lyrics.txt` has text | edit, lục bát check, reference songs (drop, pick from Downloads or paste a path; copied to `ref/`, analysed into `ref/<file>.analysis.txt`), the brief (`brief.md`) with prompt snippets, then **Tạo prompt Suno**. There is no arrangement picker: the arrangement always follows the reference song's measurements plus the brief, and falls back to the skill's default profile only when no reference is given |
+| Prompt Suno | `suno/lyrics.txt` and `suno/style.txt` exist and are newer than the lyrics, brief and analyses | chain status, copy/edit blocks, "why this arrangement" (`suno/profile.md`), agent: fill suno.com/create via CUA (never presses Create) |
 | Nhạc từ Suno | `project.json` `audio` points at a file | drop the M4A, pick a recent Downloads file, or paste a path |
 | Canh lời | `work/timings.json` exists | script `karaoke-align.py` |
 | Rút ngắn intro | intro cut, or the voice already enters before 15 s | script `trim-intro.py` (a no-op when nothing needs cutting) |

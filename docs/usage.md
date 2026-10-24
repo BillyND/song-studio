@@ -11,9 +11,9 @@ inside the app), which still serves the UI on `127.0.0.1:4317` only. Apple Silic
 ## Install and open
 
 For friends: download the newest `SongStudio-<version>.zip` from
-<https://github.com/BillyND/song-studio-releases/releases>, unzip, drag the app to
+<https://github.com/BillyND/song-studio/releases>, unzip, drag the app to
 Applications, open it, and the first time allow it under System Settings → Privacy & Security →
-"Open Anyway" (the app is not signed by Apple). The releases repo README says the same.
+"Open Anyway" (the app is not signed by Apple). The repo README says the same.
 
 From source:
 
@@ -35,7 +35,7 @@ downloads to `~/Downloads`, and links outside the studio open in the default bro
 
 ## Updates
 
-Sparkle 2.10 checks <https://github.com/BillyND/song-studio-releases/releases/latest/download/appcast.xml>
+Sparkle 2.10 checks <https://github.com/BillyND/song-studio/releases/latest/download/appcast.xml>
 every hour (and on Song Studio → Kiểm tra cập nhật…), downloads in the background, verifies
 the EdDSA signature, and installs on quit or when the user clicks "Cài đặt cập nhật". Before
 relaunching it waits until no job is queued or running. Each release also carries a snapshot of
@@ -47,6 +47,11 @@ its file name until its first start on 1.0.13 or later, when it renames itself t
 `Song Studio.app` and reopens. Internal names (bundle id `local.que-huong-studio`, the update
 feed, `~/.config/que-huong-studio`, `~/.local/share/que-huong-studio`, keychain service
 `que-huong-studio`, the skill) are unchanged, so songs, settings and keys carry over.
+
+Releases up to 1.0.15 live in the public `BillyND/song-studio-releases` repo, created while the
+source was private (Sparkle cannot download from a private repo). 1.0.16 is published in both
+repos and points the feed at this repo; `song-studio-releases` is archived after that and stays
+online for copies that have not updated yet.
 
 Publishing a version (only from the Mac that holds the two keys below):
 

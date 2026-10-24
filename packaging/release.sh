@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 # Publish a new version: build the app, zip it, sign the zip with the Sparkle key in the keychain,
-# write appcast.xml and upload both as a GitHub release of the public releases repo.
+# write appcast.xml and upload both as a GitHub release of this (public) repo.
 # Installed apps find it through SUFeedURL (…/releases/latest/download/appcast.xml).
 # Usage: packaging/release.sh <version> <skill-dir> [notes]   (notes may also come from $NOTES)
 set -euo pipefail
 VERSION="$1"
 SKILL="$2"
 NOTES="${3:-${NOTES:-}}"
-REPO="BillyND/song-studio-releases"
+REPO="BillyND/song-studio"
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 OUT="$ROOT/out"
 SIGN="$ROOT/packaging/sparkle-tools/bin/sign_update"

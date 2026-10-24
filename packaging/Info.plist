@@ -19,7 +19,7 @@
   <!-- the window talks only to the studio's own server on 127.0.0.1 -->
   <key>NSAppTransportSecurity</key><dict><key>NSAllowsLocalNetworking</key><true/></dict>
   <!-- Sparkle: new versions come from the public releases repo, signed with the EdDSA key below -->
-  <key>SUFeedURL</key><string>https://github.com/BillyND/song-studio-releases/releases/latest/download/appcast.xml</string>
+  <key>SUFeedURL</key><string>https://github.com/BillyND/song-studio/releases/latest/download/appcast.xml</string>
   <key>SUPublicEDKey</key><string>__SPARKLE_KEY__</string>
   <key>SUEnableAutomaticChecks</key><true/>
   <key>SUAutomaticallyUpdate</key><true/>

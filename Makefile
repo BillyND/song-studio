@@ -5,6 +5,8 @@ APPDIR  ?= $(HOME)/Applications/Quê Hương Studio.app
 SKILL   ?= $(HOME)/.claude/skills/suno-que-huong
 BIN      = bin/que-huong-studio
 SPARKLE  = 2.10.0
+# release notes travel to packaging/release.sh in the environment (they may span lines)
+export NOTES
 
 .PHONY: build test run app install release sparkle-tools uninstall clean
 
@@ -31,9 +33,10 @@ install: app
 	ln -sf "$(APPDIR)/Contents/MacOS/que-huong-studio" "$(PREFIX)/bin/que-huong-studio"
 	@echo "Installed $(VERSION). Open it with Spotlight: Quê Hương Studio"
 
-# release: bump VERSION first; publishes to the public releases repo, and every installed app updates itself
+# release: bump VERSION first; publishes to the public releases repo, and every installed app updates itself.
+# NOTES (optional, may span lines) reaches the script through the environment, not the command line.
 release: test sparkle-tools
-	bash packaging/release.sh "$(VERSION)" "$(SKILL)" "$(NOTES)"
+	bash packaging/release.sh "$(VERSION)" "$(SKILL)"
 
 sparkle-tools:
 	@test -x packaging/sparkle-tools/bin/sign_update || (mkdir -p packaging/sparkle-tools && \

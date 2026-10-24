@@ -742,11 +742,13 @@ func TestDeleteMovesToTrash(t *testing.T) {
 		t.Fatal("video should be in the Trash")
 	}
 
-	m.Submit(RunSpec{Kind: "agent", Project: slug, Cwd: d.Dir, Argv: []string{"/bin/sh", "-c", "sleep 5"}})
+	job, _ := m.Submit(RunSpec{Kind: "agent", Project: slug, Cwd: d.Dir, Argv: []string{"/bin/sh", "-c", "sleep 5"}})
+	waitStatus(t, m, job.ID, "running")
 	if w := del("/api/projects/" + slug); w.Code != http.StatusConflict {
 		t.Fatalf("a song with a running job must not be deleted, got %d", w.Code)
 	}
-	m.Shutdown(time.Second)
+	m.Stop(job.ID)
+	waitStatus(t, m, job.ID, "stopped")
 	if w := del("/api/projects/" + slug); w.Code != 200 {
 		t.Fatalf("trash project: %d %s", w.Code, w.Body.String())
 	}

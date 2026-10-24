@@ -8,11 +8,13 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"sort"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 	"unicode"
 
@@ -646,7 +648,18 @@ func moveToTrash(home, src string) (string, error) {
 		ext := filepath.Ext(base)
 		dst = filepath.Join(trash, strings.TrimSuffix(base, ext)+" "+time.Now().Format("15.04.05")+ext)
 	}
-	return dst, os.Rename(src, dst)
+	err := os.Rename(src, dst)
+	if errors.Is(err, syscall.EXDEV) {
+		// another volume has its own Trash; Finder knows where it is and keeps "Put Back"
+		const script = `on run argv
+tell application "Finder" to delete (POSIX file (item 1 of argv) as alias)
+end run`
+		if out, ferr := exec.Command("osascript", "-e", script, src).CombinedOutput(); ferr != nil {
+			return "", fmt.Errorf("không chuyển được vào Thùng rác: %s", strings.TrimSpace(string(out)))
+		}
+		return "Thùng rác của ổ chứa bài", nil
+	}
+	return dst, err
 }
 
 // safeFileName turns a song title into a file name that stays inside its folder.

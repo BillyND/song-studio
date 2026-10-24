@@ -84,7 +84,7 @@ func defaultConfig(home string) Config {
 		Credits:        [][2]string{{"Sáng tác: ", ""}, {"Phổ nhạc: ", ""}},
 		// Image is filled by normalizeImage: sharing defaultImage.Models here would let
 		// json.Unmarshal write a user's models into the package default
-		Presets:        defaultPresets,
+		Presets: defaultPresets,
 		Agents: map[string]AgentConfig{
 			"claude": {Bin: firstExisting("/opt/homebrew/bin/claude", "claude"), Model: ""},
 			"omp":    {Bin: firstExisting(filepath.Join(home, ".local", "bin", "omp"), "omp"), Model: ""},

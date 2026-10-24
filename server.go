@@ -65,6 +65,8 @@ func (a *App) routes() http.Handler {
 	mux.HandleFunc("GET /api/bootstrap", a.bootstrap)
 	mux.HandleFunc("GET /api/system", a.system)
 	mux.HandleFunc("PUT /api/settings", a.putSettings)
+	mux.HandleFunc("GET /api/doctor", a.doctorHandler)
+	mux.HandleFunc("GET /api/diagnostics", a.diagnostics)
 	mux.HandleFunc("GET /api/secrets", a.listSecrets)
 	mux.HandleFunc("PUT /api/secrets/{name}", a.putSecret)
 	mux.HandleFunc("DELETE /api/secrets/{name}", a.deleteSecret)

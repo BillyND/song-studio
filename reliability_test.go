@@ -1,7 +1,10 @@
 package main
 
 import (
+	"archive/zip"
+	"bytes"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -175,5 +178,60 @@ func TestAgentInterruptedOnShutdown(t *testing.T) {
 	r, _ := m2.Get(meta.ID)
 	if got := r.snapshot(); got.Status != "interrupted" {
 		t.Fatalf("an agent cut off by shutdown is not re-run: %s", got.Status)
+	}
+}
+
+func TestDoctorAndDiagnostics(t *testing.T) {
+	home := t.TempDir()
+	cs, _ := loadConfig(filepath.Join(home, "c.json"), home)
+	data := t.TempDir()
+	m, _ := newManager(data, func() (int, int) { return 1, 1 })
+	defer m.Shutdown(time.Second)
+	store := &memStore{}
+	store.Set("image.hub", "hub-secret-key-777777")
+	app := &App{cfg: cs, runs: m, projects: Projects{cfg: cs}, secrets: store, token: "tok", home: home, version: "t", build: "b", started: time.Now()}
+	checks := app.doctor()
+	ids := map[string]Check{}
+	for _, c := range checks {
+		ids[c.ID] = c
+	}
+	for _, id := range []string{"ffmpeg", "uv", "skill", "venv", "disk", "imagekey"} {
+		if _, ok := ids[id]; !ok {
+			t.Fatalf("doctor misses %s: %+v", id, checks)
+		}
+	}
+	if ids["imagekey"].Status != "ok" || ids["skill"].Status != "bad" {
+		t.Fatalf("key set and skill missing should show: %+v %+v", ids["imagekey"], ids["skill"])
+	}
+	// a failed run whose log echoed a key must come out redacted
+	meta, _ := m.Submit(RunSpec{Kind: "script", Cwd: data, Argv: []string{"/bin/sh", "-c", "echo token hub-secret-key-777777 sk-abcdefghijklmnop1234 >&2; exit 3"}})
+	waitStatus(t, m, meta.ID, "failed")
+	os.WriteFile(filepath.Join(data, "studio.log"), []byte("Authorization: Bearer abcdefghijklmnopqrstu\n"), 0o644)
+	r := httptest.NewRequest("GET", "/api/diagnostics", nil)
+	r.Host = "127.0.0.1:4317"
+	w := httptest.NewRecorder()
+	app.routes().ServeHTTP(w, r)
+	body := w.Body.String()
+	if w.Code != 200 || !strings.HasPrefix(body, "PK") {
+		t.Fatalf("diagnostics should be a zip: %d", w.Code)
+	}
+	zr, err := zip.NewReader(bytes.NewReader(w.Body.Bytes()), int64(w.Body.Len()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	names := []string{}
+	for _, f := range zr.File {
+		names = append(names, f.Name)
+		rc, _ := f.Open()
+		b, _ := io.ReadAll(rc)
+		rc.Close()
+		for _, leak := range []string{"hub-secret-key-777777", "sk-abcdefghijklmnop1234", "abcdefghijklmnopqrstu"} {
+			if strings.Contains(string(b), leak) {
+				t.Fatalf("%s leaks %s", f.Name, leak)
+			}
+		}
+	}
+	if !strings.Contains(strings.Join(names, ","), "runs/"+meta.ID+"/events.jsonl") {
+		t.Fatalf("failed runs should carry their events: %v", names)
 	}
 }

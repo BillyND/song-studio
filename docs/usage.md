@@ -52,6 +52,14 @@ Flags: `-addr 127.0.0.1:4317`, `-no-open`, `-config`, `-data`, `-version`.
 | Cảnh & ảnh AI | every non-reused scene has `img/<id>.png` | agent: plan scenes; script: generate missing images |
 | Xem trước | stills exist and were rendered from the current inputs | script: render stills (`still auto` picks the checkpoints) |
 | Xuất video | an MP4 exists and was rendered from the current inputs | **Làm video tự động** (whole chain), or render only |
+| Bản nhạc | `<title> - Bản nhạc.musicxml` is newer than the timings | script `transcribe-sheet.py`: meter (2/4, 3/4, 4/4) and an optional key to transpose to; open the PDF, edit in MuseScore, reveal in Finder |
+
+The lead sheet takes its pitch from the separated vocal (pYIN) and its rhythm from the
+per-word timings on the song's beat grid, so each Vietnamese syllable becomes a note and a
+syllable held on two clear pitches becomes a slurred melisma. It is a draft: on the Ninh Bình
+song about 77–81% of the sung pitch lands within a semitone of the written notes, and some
+rhythms need a few minutes of correction in MuseScore. The PDF and page previews need
+MuseScore 4 (`brew install --cask musescore`); without it only the MusicXML and MIDI are written.
 
 The New Song dialog takes the same reference songs and brief, and by default starts
 **Tạo prompt Suno** right away, so a song goes from lyrics to a ready Suno prompt in one step.
@@ -79,7 +87,8 @@ The New Song dialog takes the same reference songs and brief, and by default sta
 parallel with the lyric-review agent; the arrangement agent starts when both succeed and
 writes Styles, section-tag descriptions, `suno/profile.md`, `vocal` and `profile`. A failed link
 fails the links after it instead of leaving them waiting. **Làm video tự động** chains align →
-trim → scenes agent → images → stills → render and skips links that are already done. The
+trim → scenes agent → images → stills → render and skips links that are already done; the
+lead sheet runs right after trim, beside the scene work. The
 console shows the whole chain above the timeline; click a link to follow it.
 
 Jobs are either heavy (vocal separation, alignment, analysis, stills, render: default 1 at a

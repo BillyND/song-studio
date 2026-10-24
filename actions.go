@@ -19,6 +19,8 @@ type ActionRequest struct {
 	Profile string    `json:"profile"` // "" = choose from references and brief, else a skill profile id
 	VocalAt float64   `json:"vocalAt"` // trim target second
 	Times   []float64 `json:"times"`   // stills
+	Meter   string    `json:"meter"`   // sheet: 2/4, 3/4 or 4/4; "" = last run's
+	Key     string    `json:"key"`     // sheet: tonic to transpose to, "orig" = as sung; "" = last run's
 	// chained is set for links of a chain: inputs made by earlier links do not exist yet,
 	// so per-step preconditions are skipped and the scripts check at run time.
 	chained bool
@@ -46,6 +48,7 @@ var workflowActions = []Action{
 	{ID: "images", Step: "scenes", Label: "Tạo ảnh còn thiếu", Kind: "script", Hint: "4 ảnh song song qua hub ảnh"},
 	{ID: "stills", Step: "stills", Label: "Render khung hình xem trước", Kind: "script", Heavy: true, Hint: "Tựa đề, đếm ngược, giữa câu, đoạn kết"},
 	{ID: "render", Step: "render", Label: "Xuất video", Kind: "script", Heavy: true, Hint: "MP4 1080p, khoảng 8–9 phút"},
+	{ID: "sheet", Step: "sheet", Label: "Chép bản nhạc", Kind: "script", Heavy: true, Hint: "Giai điệu và lời từ giọng hát, ra PDF; khoảng 30 giây"},
 }
 
 func findAction(id string) *Action {
@@ -271,6 +274,7 @@ func pipelineSpecs(name string, cfg Config, d ProjectDetail, req ActionRequest) 
 				return nil, nil, err
 			}
 		}
+		timed := last() // the lead sheet only needs final timings, so it runs beside the scene work
 		header := fmt.Sprintf(promptHeader, cfg.SkillDir, d.Dir) + "\n"
 		switch {
 		case len(pc.Scenes) == 0:
@@ -292,11 +296,18 @@ func pipelineSpecs(name string, cfg Config, d ProjectDetail, req ActionRequest) 
 		if err := addScript("render", last()); err != nil {
 			return nil, nil, err
 		}
+		if realign || status["sheet"] != "done" {
+			if err := addScript("sheet", timed); err != nil {
+				return nil, nil, err
+			}
+		}
 	default:
 		return nil, nil, fmt.Errorf("unknown pipeline %q", name)
 	}
 	return specs, deps, nil
 }
+
+var sheetKey = regexp.MustCompile(`^([A-G](b|#)?|orig)?$`)
 
 // scriptArgv builds a deterministic script run in the skill directory.
 // Paths reach bash only as positional arguments, never spliced into the script text.
@@ -342,6 +353,16 @@ for f in "$@"; do echo "== $(basename "$f")"; "$PY" scripts/analyze-reference.py
 		name := safeFileName(d.Title+" "+d.Subtitle, filepath.Base(dir)) + " - Karaoke.mp4"
 		out := filepath.Join(dir, name)
 		return []string{"/bin/bash", "-c", py + `scripts/render-karaoke-video.py "$1" full "$2"`, "render", dir, out}, "Xuất video karaoke", nil
+	case "sheet":
+		if len(d.Timings) == 0 && !req.chained {
+			return nil, "", errors.New("chưa có timing: chạy Canh lời trước")
+		}
+		if !contains([]string{"", "2/4", "3/4", "4/4"}, req.Meter) || !sheetKey.MatchString(req.Key) {
+			return nil, "", errors.New("nhịp hoặc giọng không hợp lệ")
+		}
+		out := filepath.Join(dir, safeFileName(d.Title+" "+d.Subtitle, filepath.Base(dir))+" - Bản nhạc")
+		return []string{"/bin/bash", "-c", py + `scripts/transcribe-sheet.py "$1" --out "$2" ${3:+--meter "$3"} ${4:+--key "$4"}`,
+			"sheet", dir, out, req.Meter, req.Key}, "Chép bản nhạc", nil
 	}
 	return nil, "", fmt.Errorf("unknown script action %q", action)
 }

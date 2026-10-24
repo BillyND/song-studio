@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 	"unicode"
@@ -77,6 +78,55 @@ type ProjectDetail struct {
 	Brief      string          `json:"brief"`
 	Profile    string          `json:"profile"` // suno/profile.md written from the references and brief
 	Steps      []Step          `json:"steps"`
+	Sheet      *SheetInfo      `json:"sheet,omitempty"`
+}
+
+// SheetInfo describes the lead sheet transcribed from the vocal (work/sheet.json).
+type SheetInfo struct {
+	XML        string   `json:"xml"`
+	PDF        string   `json:"pdf,omitempty"`
+	MIDI       string   `json:"midi,omitempty"`
+	Pages      []string `json:"pages"`
+	Key        string   `json:"key"`
+	SungKey    string   `json:"sungKey"`
+	TargetKey  string   `json:"targetKey"`
+	Meter      string   `json:"meter"`
+	BPM        float64  `json:"bpm"`
+	PitchMatch float64  `json:"pitchMatch"`
+}
+
+func readSheet(dir string) *SheetInfo {
+	var raw struct {
+		Base       string  `json:"base"`
+		KeyVi      string  `json:"key_vi"`
+		SungKey    string  `json:"sung_key"`
+		TargetKey  string  `json:"target_key"`
+		Meter      string  `json:"meter"`
+		BPM        float64 `json:"bpm"`
+		PitchMatch float64 `json:"pitch_match"`
+	}
+	b, err := os.ReadFile(filepath.Join(dir, "work", "sheet.json"))
+	if err != nil || json.Unmarshal(b, &raw) != nil || raw.Base == "" || raw.Base != filepath.Base(raw.Base) {
+		return nil
+	}
+	if !exists(filepath.Join(dir, raw.Base+".musicxml")) {
+		return nil
+	}
+	s := &SheetInfo{XML: raw.Base + ".musicxml", Key: raw.KeyVi, SungKey: raw.SungKey, TargetKey: raw.TargetKey,
+		Meter: raw.Meter, BPM: raw.BPM, PitchMatch: raw.PitchMatch, Pages: listRel(dir, "work/sheet", ".png")}
+	if exists(filepath.Join(dir, raw.Base+".pdf")) {
+		s.PDF = raw.Base + ".pdf"
+	}
+	if exists(filepath.Join(dir, raw.Base+".mid")) {
+		s.MIDI = raw.Base + ".mid"
+	}
+	// page-10 after page-9
+	num := func(p string) int {
+		n, _ := strconv.Atoi(strings.TrimSuffix(strings.TrimPrefix(filepath.Base(p), "page-"), ".png"))
+		return n
+	}
+	sort.Slice(s.Pages, func(i, j int) bool { return num(s.Pages[i]) < num(s.Pages[j]) })
+	return s
 }
 
 type projectConfig struct {
@@ -192,6 +242,7 @@ func (p Projects) Detail(slug string, active map[string]string) (ProjectDetail, 
 	d.Stills = filterPrefix(d.Stills, "work/still-")
 	d.Videos = karaokeVideos(dir, pc.Audio)
 	d.Timings = readTimings(filepath.Join(dir, "work", "timings.json"))
+	d.Sheet = readSheet(dir)
 	d.Updated = newestMtime(dir)
 	for _, img := range d.Images {
 		if strings.HasPrefix(img, "img/01") {
@@ -226,6 +277,7 @@ func deriveSteps(dir string, pc projectConfig, d ProjectDetail, active map[strin
 		{ID: "scenes", Title: "Cảnh & ảnh AI"},
 		{ID: "stills", Title: "Xem trước khung hình"},
 		{ID: "render", Title: "Xuất video karaoke"},
+		{ID: "sheet", Title: "Bản nhạc"},
 	}
 	set := func(id, status, detail string) {
 		for i := range steps {
@@ -329,6 +381,16 @@ func deriveSteps(dir string, pc projectConfig, d ProjectDetail, active map[strin
 		set("render", "stale", "Cảnh, lời hoặc nhạc đã đổi sau lần xuất trước")
 	default:
 		set("render", "done", d.Videos[len(d.Videos)-1])
+	}
+	switch {
+	case len(d.Timings) == 0:
+		set("sheet", "todo", "Cần canh lời trước")
+	case d.Sheet == nil:
+		set("sheet", "todo", "Chưa chép bản nhạc")
+	case mt(d.Sheet.XML).Before(mt("work/timings.json")):
+		set("sheet", "stale", "Lời hoặc nhạc đã đổi sau lần chép trước")
+	default:
+		set("sheet", "done", fmt.Sprintf("%s · %s · ♩ = %.0f", d.Sheet.Key, d.Sheet.Meter, d.Sheet.BPM))
 	}
 	for i := range steps {
 		if id, ok := active[steps[i].ID]; ok {

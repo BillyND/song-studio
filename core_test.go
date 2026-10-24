@@ -394,7 +394,7 @@ func TestReferenceSongs(t *testing.T) {
 		}
 		return Step{}
 	}
-	if d, _ := p.Detail(slug, nil); len(d.Steps) != 8 || d.Steps[0].ID != "lyrics" {
+	if d, _ := p.Detail(slug, nil); len(d.Steps) != 9 || d.Steps[0].ID != "lyrics" {
 		t.Fatalf("workflow should start at the lyrics step: %+v", d.Steps[0])
 	}
 	if _, err := p.AddRef(slug, "notes.txt", strings.NewReader("x")); err == nil {
@@ -559,13 +559,17 @@ func TestVideoPipelineBeforeAlignment(t *testing.T) {
 	for _, s := range specs {
 		steps = append(steps, s.Step)
 	}
-	if strings.Join(steps, ",") != "align,trim,scenes,scenes,stills,render" {
+	if strings.Join(steps, ",") != "align,trim,scenes,scenes,stills,render,sheet" {
 		t.Fatalf("chain %v", steps)
 	}
-	for i := 1; i < len(deps); i++ {
+	for i := 1; i < len(deps)-1; i++ {
 		if len(deps[i]) != 1 || deps[i][0] != i-1 {
 			t.Fatalf("link %d should wait for %d: %v", i, i-1, deps[i])
 		}
+	}
+	// the lead sheet needs only the trimmed timings, so it waits for trim, not for the render
+	if last := deps[len(deps)-1]; len(last) != 1 || last[0] != 1 {
+		t.Fatalf("sheet should wait for trim: %v", last)
 	}
 	if !specs[0].Heavy || specs[2].Kind != "agent" || specs[5].FingerprintDir == "" {
 		t.Fatalf("specs %+v", specs)
@@ -647,14 +651,14 @@ func TestVideoChainFollowsStaleness(t *testing.T) {
 	os.WriteFile(filepath.Join(d.Dir, "project.json"), nb, 0o644)
 	os.WriteFile(filepath.Join(d.Dir, "img", "01-title.png"), []byte("png"), 0o644)
 	d, _ = p.Detail(slug, nil)
-	if got := videoChainSteps(t, cs, d); got != "scenes,stills,render" {
+	if got := videoChainSteps(t, cs, d); got != "scenes,stills,render,sheet" {
 		t.Fatalf("finished song should only refresh images, stills, render: %s", got)
 	}
 	// new music: timings are now stale
 	time.Sleep(20 * time.Millisecond)
 	p.ImportAudio(slug, "b.m4a", strings.NewReader("audio2"))
 	d, _ = p.Detail(slug, nil)
-	if got := videoChainSteps(t, cs, d); got != "align,trim,retime,scenes,stills,render" {
+	if got := videoChainSteps(t, cs, d); got != "align,trim,retime,scenes,stills,render,sheet" {
 		t.Fatalf("replaced music should re-align and re-time scenes: %s", got)
 	}
 }
@@ -751,5 +755,62 @@ func TestDeleteMovesToTrash(t *testing.T) {
 	}
 	if w := del("/api/projects/.."); w.Code == 200 {
 		t.Fatal("dot slug must be refused")
+	}
+}
+
+func TestSheetStepAndAction(t *testing.T) {
+	home := t.TempDir()
+	cs, _ := loadConfig(filepath.Join(home, "c.json"), home)
+	c := cs.Get()
+	c.ProjectsDir = filepath.Join(home, "songs")
+	cs.cfg = c
+	p := Projects{cfg: cs}
+	slug, _ := p.Create("Tô Lịch", "Giang Ơi", "a", nil)
+	d, _ := p.Detail(slug, nil)
+	sheet := func() Step {
+		d, _ = p.Detail(slug, nil)
+		return d.Steps[len(d.Steps)-1]
+	}
+	if s := sheet(); s.ID != "sheet" || s.Status != "todo" {
+		t.Fatalf("sheet without timings: %+v", s)
+	}
+	if _, _, err := scriptArgv("sheet", "/skill", d.Dir, ActionRequest{}, d); err == nil {
+		t.Fatal("sheet without timings must be refused")
+	}
+	os.WriteFile(filepath.Join(d.Dir, "work", "timings.json"), []byte(`[{"text":"a","times":[[11,12]],"suno_start":11,"source":"whisper"}]`), 0o644)
+	time.Sleep(20 * time.Millisecond)
+	base := "Tô Lịch Giang Ơi - Bản nhạc"
+	os.WriteFile(filepath.Join(d.Dir, base+".musicxml"), []byte("<score/>"), 0o644)
+	os.WriteFile(filepath.Join(d.Dir, base+".pdf"), []byte("%PDF"), 0o644)
+	os.MkdirAll(filepath.Join(d.Dir, "work", "sheet"), 0o755)
+	for _, n := range []string{"page-10.png", "page-2.png", "page-1.png"} {
+		os.WriteFile(filepath.Join(d.Dir, "work", "sheet", n), []byte("png"), 0o644)
+	}
+	os.WriteFile(filepath.Join(d.Dir, "work", "sheet.json"), []byte(`{"base":"`+base+`","key_vi":"Mi thứ","meter":"2/4","bpm":72.4,"pitch_match":0.8,"notes":[]}`), 0o644)
+	if s := sheet(); s.Status != "done" || !strings.Contains(s.Detail, "Mi thứ · 2/4 · ♩ = 72") {
+		t.Fatalf("sheet done: %+v", s)
+	}
+	if d.Sheet.PDF != base+".pdf" || strings.Join(d.Sheet.Pages, ",") != "work/sheet/page-1.png,work/sheet/page-2.png,work/sheet/page-10.png" {
+		t.Fatalf("sheet files: %+v", d.Sheet)
+	}
+	// new timings make the sheet stale
+	time.Sleep(20 * time.Millisecond)
+	os.WriteFile(filepath.Join(d.Dir, "work", "timings.json"), []byte(`[{"text":"b","times":[[11,12]],"suno_start":11,"source":"whisper"}]`), 0o644)
+	if s := sheet(); s.Status != "stale" {
+		t.Fatalf("sheet after new timings: %+v", s)
+	}
+	// a base that tries to leave the folder is ignored
+	os.WriteFile(filepath.Join(d.Dir, "work", "sheet.json"), []byte(`{"base":"../x"}`), 0o644)
+	if sheet(); d.Sheet != nil {
+		t.Fatal("escaping base must be ignored")
+	}
+	argv, _, err := scriptArgv("sheet", "/skill", d.Dir, ActionRequest{Meter: "2/4", Key: "Bb"}, d)
+	if err != nil || argv[len(argv)-2] != "2/4" || argv[len(argv)-1] != "Bb" || !strings.HasSuffix(argv[len(argv)-3], "Tô Lịch Giang Ơi - Bản nhạc") {
+		t.Fatalf("argv %v %v", argv, err)
+	}
+	for _, bad := range []ActionRequest{{Meter: "5/4"}, {Key: "H"}, {Key: "G; rm -rf"}} {
+		if _, _, err := scriptArgv("sheet", "/skill", d.Dir, bad, d); err == nil {
+			t.Fatalf("bad options must be refused: %+v", bad)
+		}
 	}
 }

@@ -3,7 +3,7 @@ import { html, useState, useEffect, useRef, api, toast, toastError, openRun, bum
 import { Icon } from "./icons.js";
 import { Btn, StatusPill, Seg, Switch, Modal, Lightbox, Markdown, Empty, AgentPicker, useAgentChoice, AgentIcon, Field, PresetChips } from "./ui.js";
 
-const STEP_ICON = { lyrics: "type", suno: "sparkles", audio: "music", align: "mic", trim: "scissors", scenes: "image", stills: "eye", render: "film" };
+const STEP_ICON = { lyrics: "type", suno: "sparkles", audio: "music", align: "mic", trim: "scissors", scenes: "image", stills: "eye", render: "film", sheet: "sheet" };
 
 export function ProjectPage({ slug, step }) {
   const [d, setD] = useState(null);
@@ -26,7 +26,7 @@ export function ProjectPage({ slug, step }) {
   if (!d) return html`<div class="page"><div class="empty"><${Icon} name="loader" class="spin" size=${22} /></div></div>`;
   const current = step || (d.steps.find((s) => s.status === "todo" || s.status === "stale") || d.steps[d.steps.length - 1]).id;
   const ctx = { d, slug, reload: load, stamp };
-  const S = { lyrics: LyricsStep, suno: SunoStep, audio: AudioStep, align: AlignStep, trim: TrimStep, scenes: ScenesStep, stills: StillsStep, render: RenderStep }[current] || LyricsStep;
+  const S = { lyrics: LyricsStep, suno: SunoStep, audio: AudioStep, align: AlignStep, trim: TrimStep, scenes: ScenesStep, stills: StillsStep, render: RenderStep, sheet: SheetStep }[current] || LyricsStep;
   const stepMeta = d.steps.find((s) => s.id === current);
   return html`<div class="page">
     <div class="hero">
@@ -80,10 +80,10 @@ function PrimaryAction({ d, slug }) {
 
 // VideoCTA explains and starts the whole video chain in one click.
 function VideoCTA({ d, slug }) {
-  const left = ["align", "trim", "scenes", "stills", "render"].filter((id) => !stepDone(d, id)).length;
+  const left = ["align", "trim", "scenes", "stills", "render", "sheet"].filter((id) => !stepDone(d, id)).length;
   return html`<div class="cta">
     <div><div class="row" style="gap:8px"><${Icon} name="film" /><b>Làm video karaoke từ bài này</b></div>
-      <div class="muted small" style="margin-top:4px">Studio tự canh lời theo giọng hát → cắt bớt nhạc dạo nếu dài → agent lên danh sách cảnh → tạo ảnh AI → render khung xem trước → xuất video 1080p. Còn ${left} bước, khoảng 15–25 phút; bạn có thể đóng trang, việc vẫn chạy.</div></div>
+      <div class="muted small" style="margin-top:4px">Studio tự canh lời theo giọng hát → cắt bớt nhạc dạo nếu dài → agent lên danh sách cảnh → tạo ảnh AI → render khung xem trước → xuất video 1080p, kèm bản nhạc có lời. Còn ${left} bước, khoảng 15–25 phút; bạn có thể đóng trang, việc vẫn chạy.</div></div>
     <div class="cta-go"><${Btn} kind="primary" icon="zap" busy=${d.steps.some((s) => s.status === "running")} onClick=${async () => { if (await runPipeline(slug, "video")) goStep(slug, "render"); }}>Làm video tự động</${Btn}></div>
   </div>`;
 }
@@ -476,6 +476,44 @@ function StillsStep({ d, slug, stamp }) {
   </div>`;
 }
 
+const SHEET_KEYS = [["orig", "Như giọng hát"], ["C", "Đô (C)"], ["D", "Rê (D)"], ["E", "Mi (E)"], ["F", "Fa (F)"], ["G", "Sol (G)"], ["A", "La (A)"], ["Bb", "Si giáng (Bb)"], ["Eb", "Mi giáng (Eb)"]];
+
+// SheetStep writes a lead sheet (melody + lyrics) from the sung vocal, like a printed song sheet.
+function SheetStep({ d, slug, stamp }) {
+  const sh = d.sheet;
+  const [meter, setMeter] = useState(sh?.meter || "4/4");
+  const [key, setKey] = useState(sh?.targetKey || "orig");
+  const [box, setBox] = useState(null);
+  const open = (path, extra = {}) => api(`/api/projects/${encodeURIComponent(slug)}/open`, { method: "POST", body: { path, ...extra } }).catch(toastError);
+  return html`<div class="stack">
+    ${!d.timings.length && html`<div class="warn-box">Cần canh lời trước (<a href=${`#/p/${slug}/align`} style="color:inherit;text-decoration:underline">bước 4</a>): nhịp của bản nhạc lấy từ thời điểm hát từng chữ.</div>`}
+    <${ActionCard} title="Chép bản nhạc" hint="Lấy cao độ từ giọng hát đã tách và tiết tấu từ thời điểm từng chữ, viết thành bản nhạc có lời như bản in. Bản tự động, nên mở bằng MuseScore để sửa vài chỗ trước khi in"
+      onRun=${() => runAction(slug, "sheet", { meter, key })} label=${sh ? "Chép lại" : "Chép bản nhạc"} icon="sheet">
+      <div class="row wrap" style="gap:8px">
+        <${Seg} value=${meter} onChange=${setMeter} options=${["2/4", "3/4", "4/4"].map((m) => ({ value: m, label: m }))} />
+        <select class="select" value=${key} onChange=${(e) => setKey(e.target.value)} aria-label="Giọng">
+          ${SHEET_KEYS.map(([v, l]) => html`<option value=${v}>${v === "orig" ? l : "Dịch sang " + l}</option>`)}
+        </select>
+      </div>
+    </${ActionCard}>
+    ${sh ? html`
+      <div class="row wrap" style="gap:8px">
+        <span class="pill">Giọng ${sh.key}</span><span class="pill">Nhịp ${sh.meter}</span><span class="pill">♩ = ${Math.round(sh.bpm)}</span>
+        <span class="pill" title="Phần giọng hát mà nốt viết ra khớp trong vòng nửa cung">Khớp cao độ ${Math.round(sh.pitchMatch * 100)}%</span>
+      </div>
+      <div class="row wrap">
+        ${sh.pdf && html`<${Btn} size="sm" kind="primary" icon="sheet" onClick=${() => open(sh.pdf)}>Mở PDF</${Btn}>`}
+        <${Btn} size="sm" icon="edit" onClick=${() => open(sh.xml, { app: "musescore" })}>Sửa trong MuseScore</${Btn}>
+        <${Btn} size="sm" icon="folder" onClick=${() => open(sh.pdf || sh.xml, { reveal: true })}>Hiện trong Finder</${Btn}>
+      </div>
+      ${sh.pages.length ? html`<div class="sheet-pages">${sh.pages.map((p, i) => html`<figure onClick=${() => setBox(p)}><img loading="lazy" src=${media(slug, p, stamp)} alt=${`Trang ${i + 1}`} /><figcaption>Trang ${i + 1}</figcaption></figure>`)}</div>`
+        : html`<div class="muted small">Chưa có ảnh xem trước: cài MuseScore (brew install --cask musescore) rồi chép lại để có PDF.</div>`}
+      <div class="muted small">Sửa xong trong MuseScore, dùng File → Export → PDF để in. Chép lại ở đây sẽ ghi đè bản đã sửa.</div>`
+      : html`<${Empty} icon="sheet" title="Chưa có bản nhạc">Bản nhạc được chép tự động khi chạy chuỗi video, hoặc bấm Chép bản nhạc.</${Empty}>`}
+    ${box && html`<${Lightbox} src=${media(slug, box, stamp)} caption=${box} onClose=${() => setBox(null)} />`}
+  </div>`;
+}
+
 // Deletes move files to the macOS Trash, so a slip can be undone with Finder's "Put Back".
 async function trashProject(d, slug) {
   const name = [d.title, d.subtitle].filter(Boolean).join(" – ");
@@ -499,7 +537,7 @@ function RenderStep({ d, slug, stamp, reload }) {
     ${video ? html`<video controls preload="metadata" src=${media(slug, video, stamp)}></video>
       <div class="row wrap"><b class="grow">${video}</b><${Btn} size="sm" icon="play" onClick=${() => open(false)}>Mở bằng QuickTime</${Btn}><${Btn} size="sm" icon="folder" onClick=${() => open(true)}>Hiện trong Finder</${Btn}><${Btn} size="sm" kind="danger" icon="trash" onClick=${trash}>Xoá video</${Btn}></div>`
       : html`<${Empty} icon="film" title="Chưa có video">Xuất video sau khi đã xem trước khung hình.</${Empty}>`}
-    <${ChainStatus} slug=${slug} steps=${["align", "trim", "scenes", "stills", "render"]} title="Chuỗi video" />
+    <${ChainStatus} slug=${slug} steps=${["align", "trim", "scenes", "stills", "render", "sheet"]} title="Chuỗi video" />
     ${!d.audio && html`<div class="warn-box">Chưa có nhạc. Thêm file M4A từ Suno ở <a href=${`#/p/${slug}/audio`} style="color:inherit;text-decoration:underline">bước 3</a> trước.</div>`}
     <${ActionCard} agent title="Làm video tự động" hint="Canh lời → cắt intro nếu cần → agent lên cảnh → tạo ảnh còn thiếu → khung xem trước → xuất video. Canh lời, cắt intro và lên cảnh được bỏ qua khi đã làm và vẫn còn đúng" busy=${d.steps.some((s) => s.status === "running")} onRun=${() => runPipeline(slug, "video")} label="Chạy cả chuỗi" icon="zap" />
     <${ActionCard} title="Chỉ xuất video" hint="1920×1080, 30 fps, H.264 + AAC. Khoảng 8–9 phút cho bài 4 phút" onRun=${() => runAction(slug, "render")} label="Xuất video" icon="film" />

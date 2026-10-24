@@ -11,7 +11,7 @@ export function ProjectsPage() {
   return html`<div class="page">
     <div class="page-head">
       <div><div class="eyebrow">Quê Hương Studio</div><h1>Bài hát</h1>
-        <div class="muted" style="margin-top:6px">Mỗi bài đi qua 8 bước, từ lời tới video karaoke. Bấm vào một bài để làm tiếp.</div></div>
+        <div class="muted" style="margin-top:6px">Mỗi bài đi qua 9 bước, từ lời tới video karaoke và bản nhạc. Bấm vào một bài để làm tiếp.</div></div>
       <${Btn} kind="primary" icon="plus" onClick=${() => setCreating(true)}>Bài mới</${Btn}>
     </div>
     ${list === null ? html`<div class="empty"><${Icon} name="loader" class="spin" size=${22} /></div>` : html`

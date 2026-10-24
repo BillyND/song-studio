@@ -585,6 +585,7 @@ func (a *App) openInFinder(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Path   string `json:"path"`
 		Reveal bool   `json:"reveal"`
+		App    string `json:"app"` // "musescore" opens a score for editing
 	}
 	if err := decode(r, &req); err != nil {
 		failFor(w, err)
@@ -600,6 +601,9 @@ func (a *App) openInFinder(w http.ResponseWriter, r *http.Request) {
 	args := []string{target}
 	if req.Reveal {
 		args = []string{"-R", target}
+	}
+	if req.App == "musescore" {
+		args = []string{"-a", "MuseScore 4", target}
 	}
 	if err := exec.Command("open", args...).Run(); err != nil {
 		failFor(w, err)

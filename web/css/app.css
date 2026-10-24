@@ -310,14 +310,19 @@ video { background: #000; box-shadow: var(--shadow); }
 .composer-input { display: block; width: 100%; resize: none; border: none; outline: none; background: transparent; color: var(--text); font: inherit; font-size: 14px; line-height: 1.5; padding: 11px 13px 4px; max-height: 200px; }
 .composer-bar { display: flex; align-items: center; gap: 6px; padding: 6px 8px 8px 13px; }
 .composer-bar .hint { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
-.tools-fold { padding-left: 36px; }
-.tools-sum { display: flex; align-items: center; gap: 8px; width: 100%; min-width: 0; text-align: left; font: inherit; font-size: 12.5px; padding: 6px 10px; border-radius: var(--r-sm); border: 1px solid var(--border); background: var(--surface); color: var(--text-2); cursor: pointer; }
-.tools-sum:hover { border-color: var(--border-strong); color: var(--text); }
+/* consecutive tool calls fold into one section, aligned with the agent's messages; opened, the
+   calls sit inside it */
+.tools-fold { border: 1px solid var(--border); border-radius: var(--r-sm); background: var(--surface); overflow: hidden; }
+.tools-fold.open { border-color: var(--border-strong); }
+.tools-sum { display: flex; align-items: center; gap: 8px; width: 100%; min-width: 0; text-align: left; font: inherit; font-size: 12.5px; padding: 7px 10px; border: none; background: transparent; color: var(--text-2); cursor: pointer; }
+.tools-sum:hover { background: var(--surface-2); color: var(--text); }
 .tools-sum b { font-weight: 650; white-space: nowrap; }
 .tools-sum .ellipsis { flex: 1; min-width: 0; }
 .tools-chev { margin-left: auto; flex: none; transition: transform .15s; }
-.tools-sum.open .tools-chev { transform: rotate(90deg); }
-.tools-list { display: flex; flex-direction: column; gap: 10px; margin: 10px 0 0 -36px; }
+.tools-fold.open .tools-chev { transform: rotate(90deg); }
+.tools-list { display: flex; flex-direction: column; gap: 10px; padding: 10px; border-top: 1px solid var(--border); background: var(--bg-2); }
+.tools-list .ev { grid-template-columns: 22px 1fr; gap: 8px; }
+.tools-list .ev-icon { width: 22px; height: 22px; border-radius: 7px; }
 .chat-list { padding: 8px; display: flex; flex-direction: column; gap: 2px; }
 .chat-item { display: flex; align-items: center; gap: 10px; padding: 9px 8px 9px 10px; border-radius: var(--r-sm); cursor: pointer; }
 .chat-item:hover { background: var(--surface-2); }

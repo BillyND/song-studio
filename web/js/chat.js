@@ -176,8 +176,8 @@ function ToolsFold({ items, live }) {
   const failed = calls.some((e) => e.result?.error);
   const names = [...new Set(calls.map((e) => e.tool || "tool"))].join(", ");
   const last = calls[calls.length - 1];
-  return html`<div class="tools-fold">
-    <button type="button" class=${"tools-sum" + (open ? " open" : "")} onClick=${() => setOpen(!open)}>
+  return html`<div class=${"tools-fold" + (open ? " open" : "")}>
+    <button type="button" class="tools-sum" aria-expanded=${open} onClick=${() => setOpen(!open)}>
       <${Icon} name=${running ? "loader" : "wrench"} size=${13} class=${running ? "spin" : ""} />
       <b>${calls.length ? t("{n} thao tác", { n: calls.length }) : t("Nhật ký")}</b>
       <span class="muted ellipsis">${running && last ? last.title || last.tool : names}</span>
